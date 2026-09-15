@@ -1,0 +1,79 @@
+#pragma once
+#include "Scene.h"
+#include <vector>
+#include <memory>
+
+class Sprite;
+class ButtonSprite;
+
+class ReadyScene : public Scene {
+public:
+    ReadyScene();
+    ~ReadyScene();
+
+    void OnEnter() override;
+    void OnExit() override;
+    void Update(float dt) override;
+    void Render(SpriteRenderer& renderer) override;
+    void Reset() override;
+
+private:
+    std::vector<std::shared_ptr<ButtonSprite>> menuButtons;
+    std::shared_ptr<ButtonSprite> achievementEntry; // 右上角奖杯：直达成就视图（B7）
+
+    std::vector<std::shared_ptr<Sprite>> terrainSprites;
+    std::vector<std::shared_ptr<Sprite>> backgroundSprites;
+    std::vector<std::shared_ptr<Sprite>> foregroundSprites;
+
+    std::vector<std::shared_ptr<Sprite>> candleLights;
+
+    std::shared_ptr<Sprite> batSprite;
+    std::shared_ptr<Sprite> centerFrame;
+
+    // LOGO 精灵
+    std::shared_ptr<Sprite> logoSprite;
+
+private:
+    void InitScene();
+    void InitButtons();
+    void LoadSpritesFromResourceManager();
+    void CreateSceneSprites();
+
+    void ResetBatState();
+    void ResetFixedSpritesState();
+
+    void UpdateFixedSprites(float dt);
+    void UpdateBat(float dt);
+    void UpdateCandlelights(float dt);
+
+    // ===== 开始按钮分裂式模式选择（B9 改版）：悬停触发，替代旧模式选择覆盖层 =====
+    // 悬停"开始游戏"0.2s -> 按钮横向分裂成三个模式按钮（自中心滑出+展宽+淡入）；
+    // 光标停留在整行横向区域内维持分裂，离开区域后平滑收缩回单按钮；
+    // 悬停单个模式按钮 0.5s -> 光标旁淡入极小解释框；点击模式按钮（带点击音效）
+    // 开始对应模式，点击后保持分裂状态直到转场切场景（返回主菜单时由 Reset 复位）。
+    static constexpr float StartBtnY = 600.0f;     // 开始按钮行中心 y（InitButtons 布局共用）
+    static constexpr float ModeSubBtnW = 112.0f;   // 分裂后单个模式按钮宽
+    static constexpr float ModeSubBtnGap = 10.0f;  // 模式按钮间距
+    static constexpr float SplitHoverDelay = 0.2f; // 开始按钮悬停多久后分裂
+    static constexpr float TipHoverDelay = 0.5f;   // 模式按钮悬停多久后弹出解释框
+    bool  splitOpen = false;          // 目标状态：true = 分裂展开
+    float modeSplitProgress = 0.0f;   // 分裂进度（0 合并 ~ 1 完全分裂，双向动画）
+    float rowHoverTimer = 0.0f;       // 开始按钮/横向区域悬停计时
+    int   modeHoverIndex = -1;        // 当前悬停的模式按钮下标（-1 无）
+    float modeHoverTimer = 0.0f;      // 该模式按钮连续悬停计时
+    int   tipIndex = -1;              // 解释框当前展示的模式下标
+    float tipFade = 0.0f;             // 解释框淡入淡出进度
+    void UpdateModeSplit(float dt);   // 悬停计时与分裂进度推进（含模式按钮点击）
+    void DrawStartButtonRow();        // 分裂/收缩动效绘制（合并态由 ButtonSprite 绘制）
+    void DrawModeTipBox();            // 光标旁的模式解释小框
+    void DrawSplitButtonPlate(float cx, float cy, float w, float h, float alpha,
+                              bool hovered, const char* text, float fontSize,
+                              float textAlpha); // 带整体透明度的按钮底板（动效专用）
+    void StartGameWithMode(int modeIndex); // 0 经典 / 1 限时冲刺 / 2 风暴之夜
+
+    // ===== 护盾升级覆盖层（B8）：金币入口按钮 + 升级面板 =====
+    bool upgradePanelOpen = false;
+    float insufficientMsgTimer = 0.0f; // 「金币不足」提示剩余显示时间
+    void DrawUpgradeEntryButton(); // 右上角金币入口（奖杯图标左侧：金币图标 + 持有数 + 升级标签）
+    void DrawUpgradePanelUI();     // 升级面板：持续时间/充能速度两条轨道
+};
