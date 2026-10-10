@@ -202,8 +202,10 @@ void OwlKing::EnterDefeat() {
     fx.Shake(14.0f);                   // §8 抖动表：击杀 14
     fx.TriggerSlowMo(KillSlowMoDur);   // §10.5 击杀慢动作（C12 联动；场景侧线性缓升恢复）
     // 成就（§7.2 三期）：弑枭者（累计击杀 1/5/15）/ 无伤弑枭（满心击杀累计）
-    fx.NotifyAchievement("boss_kill", 1);
-    if (batHearts >= BatHeartsMax) fx.NotifyAchievement("boss_flawless", 1);
+    fx.ReportAchievement(AchievementEvent::BossKill, 1);
+    if (batHearts >= BatHeartsMax) {
+        fx.ReportAchievement(AchievementEvent::BossFlawless, 1);
+    }
     std::cout << "[Boss] Defeated! hearts left " << batHearts
               << ", hits " << combatHits << std::endl;
 }

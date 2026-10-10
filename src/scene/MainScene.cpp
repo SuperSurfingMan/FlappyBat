@@ -53,7 +53,7 @@ MainScene::MainScene()
                 if (fx.score > 0) AddScore((size_t)fx.score); // 统一入口：含模式倍率与成就上报
                 if (fx.energy > 0.0f) AddEnergy(fx.energy);
                 PlayerProfile::Get().AddCoins(fx.coins); // 局内货币（B8）
-                Achievements::Get().Notify("item_collected", 1);
+                ReportAchievement(AchievementEvent::ItemCollected, 1);
                 SpawnComboBonusText(ApplyPickupComboBonus());
                 SpawnFloatText(fx.floatText, bat->GetPosition(), fx.r, fx.g, fx.b, fx.fontSize);
             });
@@ -298,7 +298,7 @@ void MainScene::Update(float dt)
             if (hitByLightning) {
                 SpawnFloatText("遭雷击！", bat->GetPosition() + Vec2(0.0f, 46.0f),
                                0.87f, 0.35f, 0.35f, 24.0f);
-                Achievements::Get().Notify("lightning_death", 1);
+                ReportAchievement(AchievementEvent::LightningDeath, 1);
             }
             KillPlayer(hitByLightning ? "lightning" : "collision"); // 统一致死入口（含怪物复位/音效/死亡动画/结算）
         }
@@ -901,7 +901,7 @@ void MainScene::UpdateObstacles(float dt)
         // 计分：越过屏幕中心线 +1（锚点固定，不受蝙蝠横移影响）
         if (pairWhole && up->GetPosition().x >= SCREEN_WIDTH * 0.5f && newX < SCREEN_WIDTH * 0.5f) {
             AddScore(1); // 统一入口：含模式倍率与成就上报
-            Achievements::Get().Notify("pipe_passed", 1);
+            ReportAchievement(AchievementEvent::PipePassed, 1);
             // 穿过障碍物得分音效
             AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Point), 0.9f);
         }
@@ -921,7 +921,7 @@ void MainScene::UpdateObstacles(float dt)
             if (minClearance >= 0.0f && minClearance < NearMissThreshold) {
                 AddScore(NearMissBonus);
                 runNearMissCount++;
-                Achievements::Get().Notify("near_miss_run", runNearMissCount);
+                ReportAchievement(AchievementEvent::NearMissRun, runNearMissCount);
                 SpawnFloatText("贴脸 +" + std::to_string(NearMissBonus),
                                batPos + Vec2(0.0f, 40.0f),
                                UITheme::Moonlight.r, UITheme::Moonlight.g, UITheme::Moonlight.b, 22.0f);
@@ -1299,7 +1299,7 @@ float MainScene::GetCurrentGapSize() const {
 int MainScene::ApplyPickupComboBonus() {
     comboCount += 1;
     comboTimer = ComboWindow;
-    Achievements::Get().Notify("combo", comboCount);
+    ReportAchievement(AchievementEvent::Combo, comboCount);
     int bonus = std::min(comboCount - 1, ComboMaxBonus);
     if (bonus > 0) AddScore((size_t)bonus); // 含模式倍率与成就上报
     return bonus;
@@ -1853,9 +1853,11 @@ std::array<bool, 3>* MainScene::ItemUsed(int itemType) {
 
 void MainScene::AddScore(size_t base) {
     obstacles_score += base * (size_t)params().scoreFactor;
-    Achievements::Get().Notify("run_score", (long long)obstacles_score);
-    if (params().scoreEvent) {
-        Achievements::Get().Notify(params().scoreEvent, (long long)obstacles_score); // 模式专属成就
+    ReportAchievement(AchievementEvent::RunScore, (long long)obstacles_score);
+    if (mode == GameMode::TimeRush) {
+        ReportAchievement(AchievementEvent::TimeRushScore, (long long)obstacles_score);
+    } else if (mode == GameMode::StormNight) {
+        ReportAchievement(AchievementEvent::StormScore, (long long)obstacles_score);
     }
 }
 
@@ -1947,8 +1949,8 @@ void MainScene::AddTimeLimit(float sec) {
     timeLeft = std::min(TimeRushDuration, timeLeft + sec);
 }
 
-void MainScene::NotifyAchievement(const char* ev, long long n) {
-    Achievements::Get().Notify(ev, n);
+void MainScene::ReportAchievement(AchievementEvent event, long long value) {
+    Achievements::Get().Report(event, value);
 }
 
 // 统一致死入口（架构设计阶段 0）：碰撞/落雷致死与怪物致死共用同一流程，
@@ -2213,7 +2215,7 @@ void MainScene::SmashObstacles(size_t i, bool smashUp, bool smashDown) {
     }
 
     runSmashCount += (smashUp ? 1 : 0) + (smashDown ? 1 : 0); // 按根计数
-    Achievements::Get().Notify("smash_run", runSmashCount);
+    ReportAchievement(AchievementEvent::SmashRun, runSmashCount);
     AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Thunder), 1.0f); // 撞击音效
     TriggerShake(12.0f);
     SpawnFloatText("撞飞！", bat->GetPosition() + Vec2(0.0f, 70.0f),
@@ -2376,10 +2378,18 @@ void MainScene::UpdateShake(float dt) {
 // ===== 成就解锁提示（B7） =====
 
 void MainScene::PollAchievementToasts() {
-    std::string name;
-    if (!Achievements::Get().PopPendingToast(name)) return;
+    AchievementToast toastInfo{};
+    if (!Achievements::Get().PopPendingToast(toastInfo)) return;
+    const char* name = "?";
+    for (const auto& def : Achievements::Defs()) {
+        if (def.id == toastInfo.id) {
+            name = def.name;
+            break;
+        }
+    }
     auto toast = std::static_pointer_cast<ToastLayer>(achievementToast);
-    toast->SetText("成就达成 · " + name);
+    toast->SetText("成就达成 · " + std::string(name) +
+                   " Lv." + std::to_string(toastInfo.level));
     toast->SetColor(Vec3{0.941f, 0.722f, 0.314f});
     toast->Activate();
 }

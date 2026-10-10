@@ -1,5 +1,6 @@
 #pragma once
 #include "../Math.h"
+#include "../app/Achievements.h"
 #include <string>
 
 // =============================================================================
@@ -29,7 +30,7 @@ struct IStageFeedback {
     virtual void AddScore(size_t base) = 0;      // 走 AddScore 统一入口（模式倍率/成就自动生效）
     virtual void AddCoins(int n) = 0;            // 入账并落盘
     virtual void AddTimeLimit(float sec) = 0;    // 限时模式奖励时长（非限时为空操作）
-    virtual void NotifyAchievement(const char* ev, long long n) = 0;
+    virtual void ReportAchievement(AchievementEvent event, long long value) = 0;
 
     // ---- 对玩家的权威操作（唯一入口）----
     virtual void KillPlayer(const char* reason) = 0; // 统一死亡流程（怪物复位+音效+死亡动画+结算）

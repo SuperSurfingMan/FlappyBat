@@ -26,6 +26,25 @@ struct AchievementDef {
     long long tier[3];     // 三个等级阈值（依次递增）
 };
 
+enum class AchievementEvent {
+    PipePassed,
+    ItemCollected,
+    LightningDeath,
+    RunScore,
+    NearMissRun,
+    Combo,
+    SmashRun,
+    TimeRushScore,
+    StormScore,
+    BossKill,
+    BossFlawless,
+};
+
+struct AchievementToast {
+    int id;
+    int level;
+};
+
 class Achievements {
 public:
     enum { MaxLevel = 3 }; // 每个成就的等级数
@@ -72,50 +91,61 @@ public:
         return n;
     }
 
-    // ===== 事件上报（value 语义随事件不同） =====
+    // ===== 事件上报 =====
     //  pipe_passed / item_collected / lightning_death：累计 +1（value 恒传 1）
     //  run_score：本局当前总分（阈值类）
     //  near_miss_run / smash_run：本局累计值
     //  combo：当前连击数
     //  time_rush_score / storm_score：对应模式下的本局总分
-    void Notify(const char* event, long long value) {
-        std::string ev(event);
-        if (ev == "pipe_passed") {
+    void Report(AchievementEvent event, long long value) {
+        switch (event) {
+        case AchievementEvent::PipePassed:
             stats["pipes"] += value;
             CheckCumulative(7, "pipes");
-        } else if (ev == "item_collected") {
+            break;
+        case AchievementEvent::ItemCollected:
             stats["items"] += value;
             CheckCumulative(6, "items");
-        } else if (ev == "lightning_death") {
+            break;
+        case AchievementEvent::LightningDeath:
             stats["lightning"] += value;
             CheckCumulative(8, "lightning");
-        } else if (ev == "run_score") {
+            break;
+        case AchievementEvent::RunScore:
             CheckValue(0, value);
             CheckValue(1, value);
             CheckValue(2, value);
-        } else if (ev == "near_miss_run") {
+            break;
+        case AchievementEvent::NearMissRun:
             CheckValue(3, value);
-        } else if (ev == "combo") {
+            break;
+        case AchievementEvent::Combo:
             CheckValue(4, value);
-        } else if (ev == "smash_run") {
+            break;
+        case AchievementEvent::SmashRun:
             CheckValue(5, value);
-        } else if (ev == "time_rush_score") {
+            break;
+        case AchievementEvent::TimeRushScore:
             CheckValue(9, value);
-        } else if (ev == "storm_score") {
+            break;
+        case AchievementEvent::StormScore:
             CheckValue(10, value);
-        } else if (ev == "boss_kill") {
+            break;
+        case AchievementEvent::BossKill:
             stats["boss_kills"] += value;
             CheckCumulative(11, "boss_kills");
-        } else if (ev == "boss_flawless") {
+            break;
+        case AchievementEvent::BossFlawless:
             stats["boss_flawless"] += value;
             CheckCumulative(12, "boss_flawless");
+            break;
         }
     }
 
     // 弹出一个待提示的升级信息（"名称 Lv.X"），供场景每帧轮询
-    bool PopPendingToast(std::string& outName) {
+    bool PopPendingToast(AchievementToast& outToast) {
         if (pendingToasts.empty()) return false;
-        outName = pendingToasts.front();
+        outToast = pendingToasts.front();
         pendingToasts.erase(pendingToasts.begin());
         return true;
     }
@@ -224,11 +254,11 @@ private:
         if (newLevel <= cur) return;
         levels[id] = newLevel;
         Save();
-        pendingToasts.push_back(std::string(NameOf(id)) + " Lv." + std::to_string(newLevel));
+        pendingToasts.push_back({id, newLevel});
         std::cout << "[Achievement] " << NameOf(id) << " Lv." << newLevel << std::endl;
     }
 
     std::map<int, int> levels; // 成就 id -> 当前达成等级（1~MaxLevel）
     std::map<std::string, long long> stats;
-    std::vector<std::string> pendingToasts;
+    std::vector<AchievementToast> pendingToasts;
 };

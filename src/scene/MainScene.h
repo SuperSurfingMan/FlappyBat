@@ -193,7 +193,7 @@ private:
     void Shake(float intensity) override;
     void AddCoins(int n) override;
     void AddTimeLimit(float sec) override;
-    void NotifyAchievement(const char* ev, long long n) override;
+    void ReportAchievement(AchievementEvent event, long long value) override;
     void KillPlayer(const char* reason) override; // 统一致死入口：碰撞/落雷/怪物共用
     void BounceBat(float dx, float dy) override;
     void OnEnemyItemCollected(Vec2 pos) override;
