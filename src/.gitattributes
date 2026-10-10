@@ -1,0 +1,78 @@
+# =============================================================================
+# 行尾与文件类型规范化规则
+# 目的：让行尾处理由仓库自身决定，不再依赖每台机器的 core.autocrlf 配置，
+#       消除“只有换行符变化”的提交噪声（例如 app/Application.cpp 曾出现的
+#       -} / +} 纯行尾差异）。
+# 约定：仓库内（index/blob）统一存 LF；源代码检出时也保持 LF。
+# =============================================================================
+
+# --- 基线：自动识别文本，入库统一 LF，检出用本机原生行尾 ---
+* text=auto
+
+# --- 源代码：文本 + 检出 LF（跨平台 diff 稳定）---
+*.c   text eol=lf
+*.h   text eol=lf
+*.cpp text eol=lf
+*.cc  text eol=lf
+*.cxx text eol=lf
+*.hpp text eol=lf
+*.hh  text eol=lf
+*.inl text eol=lf
+
+# --- 着色器 / 构建 / 脚本 / 配置：文本 + 检出 LF ---
+*.glsl    text eol=lf
+*.vert    text eol=lf
+*.frag    text eol=lf
+*.geom    text eol=lf
+*.comp    text eol=lf
+*.cmake   text eol=lf
+CMakeLists.txt text eol=lf
+*.py      text eol=lf
+*.sh      text eol=lf
+*.md      text eol=lf
+*.txt     text eol=lf
+*.json    text eol=lf
+*.ini     text eol=lf
+*.toml    text eol=lf
+*.xml     text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+
+# --- Windows 批处理：必须 CRLF，否则 cmd.exe 解析异常 ---
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# --- 二进制：禁止行尾转换，也不做文本 diff ---
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.bmp   binary
+*.gif   binary
+*.tga   binary
+*.ico   binary
+*.cur   binary
+*.webp  binary
+*.psd   binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+*.wav   binary
+*.mp3   binary
+*.ogg   binary
+*.flac  binary
+*.m4a   binary
+*.mp4   binary
+*.exe   binary
+*.dll   binary
+*.lib   binary
+*.a     binary
+*.o     binary
+*.obj   binary
+*.so    binary
+*.dylib binary
+*.zip   binary
+*.7z    binary
+*.gz    binary
+*.pak   binary
+*.fbpk  binary
