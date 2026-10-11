@@ -1,5 +1,6 @@
 #pragma once
 #include "Scene.h"
+#include "../ui/UIWidget.h"   // 音量滑条热区控件需完整类型
 #include <memory>
 
 class Sprite;
@@ -26,9 +27,12 @@ private:
     float bgmVolume    = 1.0f;
     float sfxVolume    = 1.0f;
 
-    // 正在拖拽的音量滑块下标（-1 = 未拖拽；0/1/2 = 全局/背景音乐/音效）
-    int draggingSlider = -1;
+    // ===== UI 交互控件（拖动归属由 UISystem 维护） =====
+    int settingsGroupId = -1; // 设置页控件组：返回按钮 + 三条音量滑条
+    UIWidget sliders[3];      // 全局/背景音乐/音效滑条（按下即捕获）
 
     void SyncFromAudioSystem();
     void DrawImGuiLayout();
+    float& VolumeRef(int idx);           // 按下标取对应音量缓存字段
+    void   ApplyVolume(int idx, float v); // 写入 AudioSystem 并实时持久化
 };

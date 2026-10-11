@@ -2,6 +2,7 @@
 #include "../sprite/ButtonSprite.h"
 #include "../ui/UIBuilder.h"
 #include "../ui/UITheme.h"
+#include "../ui/UISystem.h"
 #include "../app/Application.h"
 #include "../res/ResourceManager.h"
 #include "../sprite/Sprite.h"
@@ -9,6 +10,11 @@
 #include "../scene/SceneManager.h"
 #include "../Math.h"
 #include <iostream>
+
+namespace {
+// 结算面板：模态组，层叠高于局内 HUD（面板一弹出就独占交互）
+constexpr int kLayerOverPanel = 50;
+}
 
 MainSceneOverLayer::MainSceneOverLayer() {
     InitSprites();
@@ -38,6 +44,26 @@ MainSceneOverLayer::MainSceneOverLayer() {
         gameOverTextSprite = std::make_shared<Sprite>(goTex);
         gameOverTextSprite->SetLumaKey(true, 0.06f, 0.10f);
     }
+}
+
+void MainSceneOverLayer::ActivateLayer() {
+    layerActive = true;
+    SyncInputGroups();
+}
+
+void MainSceneOverLayer::SetInteractive(bool interactive) {
+    if (this->interactive == interactive) return;
+    this->interactive = interactive;
+    SyncInputGroups();
+}
+
+// 组开关 + 模态压栈：面板激活时才参与命中，离开主场景时自动失效
+void MainSceneOverLayer::SyncInputGroups() {
+    UISystem& ui = UISystem::Get();
+    const bool on = layerActive && interactive;
+    ui.SetGroupEnabled(overGroupId, on);
+    if (on) ui.PushModal(overGroupId);
+    else ui.PopModal(overGroupId);
 }
 
 void MainSceneOverLayer::Update(float dt) {
@@ -103,10 +129,15 @@ void MainSceneOverLayer::Reset() {
     blinkInterval = 2.0f;
     currentScore = 0;
     bestScore = 0;
+    UISystem::Get().ClearWidgetState(overGroupId);
+    SyncInputGroups();
 }
 
 void MainSceneOverLayer::InitSprites() {
     const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
+
+    UISystem& ui = UISystem::Get();
+    overGroupId = ui.CreateGroup(kLayerOverPanel);
 
     // 蝙蝠眨眼动画
     gameOverImage = std::make_shared<Sprite>();
@@ -144,6 +175,7 @@ void MainSceneOverLayer::InitSprites() {
     restartButton->SetOnClick([this](){
         if (onRestart) onRestart();
     });
+    ui.Add(overGroupId, restartButton.get());
 
     backToReadyButton = std::make_shared<ButtonSprite>(
         ButtonSprite::Style::Secondary,
@@ -153,6 +185,7 @@ void MainSceneOverLayer::InitSprites() {
     backToReadyButton->SetOnClick([](){
         SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
     });
+    ui.Add(overGroupId, backToReadyButton.get());
 }
 
 void MainSceneOverLayer::DrawImGUILayout() {

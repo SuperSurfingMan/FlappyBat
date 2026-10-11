@@ -12,13 +12,15 @@
 #include "../LightningRenderer.h"
 #include "../WindRenderer.h"
 #include "../GameMode.h"
+#include "../ui/UIWidget.h"          // 局内 HUD 热区控件（能量图标）需完整类型
+#include "../ui/GameInput.h"        // 玩法输入快照与接收接口（蝙蝠操控由 UISystem 推送）
 #include "../enemy/EnemyDirector.h"     // 怪物框架（含 IEnemy/EncounterRules 契约）
 #include "../enemy/IStageFeedback.h"    // MainScene 实现表现服务接口（需完整类型）
 
 class RainSystem;
 class Layer;
 
-class MainScene : public Scene, public IStageFeedback {
+class MainScene : public Scene, public IStageFeedback, public IGameInputSink {
 public:
     MainScene();
     ~MainScene();
@@ -34,6 +36,12 @@ public:
     // 类内别名保持 MainScene::GameMode 的既有引用方式不变
     using GameMode = ::GameMode;
     void SetMode(GameMode m) { mode = m; }
+
+    // ===== IGameInputSink（玩法输入不再由本场景逐帧询问设备） =====
+    // UISystem 每帧先做 UI 命中裁决与控件派发，再把“剩下的输入”作为本帧快照推过来；
+    // 接收时机在 Scene::Update 之前，因此本帧内任何位置读到的都是同一份已裁决结果
+    void OnGameInput(const GameInputFrame& frame) override { gameInput = frame; }
+    GameInputFrame gameInput;   // 本帧快照（键位需先经 UISystem::WatchKeys 登记）
 
     // 模式差异的唯一事实来源：所有随模式变化的数值集中在这张参数表，
     // 调用端一律经 params() 取用，不再出现散落的 mode == 分支
@@ -100,6 +108,12 @@ private:
     std::shared_ptr<Layer> mainSceneUILayer;
     std::shared_ptr<Layer> mainSceneOverLayer;
 
+    // ===== 局内 HUD 交互控件 =====
+    // 能量图标热区：仅充满时可命中（释放护盾）；未满时不启用，
+    // 点击自然透传给振翅。命中判定与事件派发均由 UISystem 完成。
+    UIWidget energyIcon;
+    int hudGroupId = -1;
+
     void UpdateBackground(float dt);
     void UpdateForeground(float dt);
     void UpdateTerrain(float dt);
@@ -107,10 +121,10 @@ private:
     void UpdateBat(float dt, bool diveRequested);
     void UpdateItems(float dt);
 
-    // 当前鼠标是否位于可交互 UI（按钮排/暂停面板按钮/充满时的能量图标）上：
-    // 这类点击由按钮消费，不应同时触发蝙蝠振翅
-    bool IsPointerOverInteractiveUI() const;
-    // 能量图标（闪电）的命中矩形，绘制与点击判定共用一份几何
+    // 局内 HUD 交互闸门：同步本场景 HUD 组开关并转发给 UI 图层
+    // （入场倒数/转场/结算期间不得让局内按钮抢占鼠标）
+    void SetHudInteractive(bool interactive);
+    // 能量图标（闪电）的命中矩形，绘制与 UISystem 命中判定共用一份几何
     void GetEnergyIconRect(float& cx, float& cy, float& size) const;
 
     void RenderItems(SpriteRenderer& renderer);

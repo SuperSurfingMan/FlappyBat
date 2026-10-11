@@ -2,15 +2,24 @@
 #include "../sprite/ButtonSprite.h"
 #include "../ui/UIBuilder.h"
 #include "../ui/UITheme.h"
+#include "../ui/UISystem.h"
 #include "../res/ResourceManager.h"
 #include "../sprite/Sprite.h"
 #include "../Config.h"
 #include "../scene/SceneManager.h"
 #include "../app/Application.h"
-#include "../Input.h"
 #include "../audio/AudioSystem.h"
 
+namespace {
+// UI 层叠约定：数值越大越靠上，命中解析优先（全局统一表见 src/ui/UISystem.h 顶部说明）
+constexpr int kLayerHudIcons   = 10;  // 局内顶部图标排（非模态）
+constexpr int kLayerPausePanel = 40;  // 暂停面板（模态：压栈期间图标排让位）
+}
+
 MainSceneUILayer::MainSceneUILayer() {
+    // 声明暂停快捷键（ESC/P/R）：交给 UISystem 每帧采集后推送本图层
+    UISystem::Get().WatchKeys({GLFW_KEY_ESCAPE, GLFW_KEY_P, GLFW_KEY_R});
+
     InitAllButtons();
 
     // GL 绘制的全屏遮罩（半透明黑）
@@ -39,20 +48,28 @@ MainSceneUILayer::MainSceneUILayer() {
     }
 }
 
+MainSceneUILayer::~MainSceneUILayer() {
+    // 兼底注销订阅（正常由 MainScene OnExit 注销）：防退出路径残留悬垂 sink
+    UISystem::Get().RemoveGameInputSink(this);
+}
+
 void MainSceneUILayer::Update(float dt) {
-    // ===== 键盘快捷键 =====
+    // ===== 键盘快捷键（均由 UISystem 推送的 gameInput 快照读取，不再直接询设备） =====
     // ESC / P：切换暂停（未暂停 <-> 暂停）
-    if (Input::IsKeyPressed(GLFW_KEY_ESCAPE) || Input::IsKeyPressed(GLFW_KEY_P)) {
+    if (gameInput.Pressed(GLFW_KEY_ESCAPE) || gameInput.Pressed(GLFW_KEY_P)) {
         isPausing = !isPausing;
         AudioSystem::Instance().PlaySFX(
             SFXToFile(isPausing ? SFX::Pause : SFX::Resume), 0.9f);
     }
     // R：暂停面板中快捷重新开始（与点击"重新开始"按钮等价）
-    if (isPausing && Input::IsKeyPressed(GLFW_KEY_R)) {
+    if (isPausing && gameInput.Pressed(GLFW_KEY_R)) {
         isPausing = false;
         AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Click), 1.0f);
         if (onRestartCallback) onRestartCallback();
     }
+
+    // 交互闸门：暂停时图标排整体让位（旧写法仍在更新 home/quit，存在误点缺陷，已修正）
+    SyncInputGroups();
 
     if (isPausing) {
         resumeButton->Update(dt);
@@ -63,6 +80,22 @@ void MainSceneUILayer::Update(float dt) {
     }
     homeButton->Update(dt);
     quitButton->Update(dt);
+}
+
+void MainSceneUILayer::SetInteractive(bool interactive) {
+    if (this->interactive == interactive) return;
+    this->interactive = interactive;
+    SyncInputGroups();
+}
+
+// 组开关与模态归属的唯一写入点：业务态变了就同步给 UISystem
+void MainSceneUILayer::SyncInputGroups() {
+    UISystem& ui = UISystem::Get();
+    const bool on = interactive;
+    ui.SetGroupEnabled(hudGroupId, on && !isPausing);
+    ui.SetGroupEnabled(pauseGroupId, on && isPausing);
+    if (on && isPausing) ui.PushModal(pauseGroupId);
+    else ui.PopModal(pauseGroupId);
 }
 
 void MainSceneUILayer::Render(SpriteRenderer& renderer) {
@@ -103,6 +136,12 @@ void MainSceneUILayer::InitAllButtons() {
     const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
     const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
 
+    // 交互控件全部登记到 UISystem：命中判定与事件派发由系统集中完成，
+    // 注册顺序即层叠顺序（同组内后注册者在上）
+    UISystem& ui = UISystem::Get();
+    hudGroupId   = ui.CreateGroup(kLayerHudIcons);
+    pauseGroupId = ui.CreateGroup(kLayerPausePanel);
+
     // ===== 顶部图标按钮排（右上角） =====
     const float margin = 22.0f;
     const float iconSize = UITheme::IconBtnSize;
@@ -114,6 +153,7 @@ void MainSceneUILayer::InitAllButtons() {
     pauseButton = std::make_shared<ButtonSprite>(
         UIBuilder::IconKind::Pause, Vec2{cx, cy}, iconSize);
     pauseButton->SetOnClick([this](){ isPausing = true; });
+    ui.Add(hudGroupId, pauseButton.get());
 
     cx -= iconSize + iconSpacing;
     homeButton = std::make_shared<ButtonSprite>(
@@ -121,6 +161,7 @@ void MainSceneUILayer::InitAllButtons() {
     homeButton->SetOnClick([](){
         SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
     });
+    ui.Add(hudGroupId, homeButton.get());
 
     cx -= iconSize + iconSpacing;
     quitButton = std::make_shared<ButtonSprite>(
@@ -128,6 +169,7 @@ void MainSceneUILayer::InitAllButtons() {
     quitButton->SetOnClick([](){
         Application::Get().RequestQuit();
     });
+    ui.Add(hudGroupId, quitButton.get());
 
     // ===== 暂停面板按钮（纵向，面板下半部） =====
     const float btnY0 = WIN_HEIGHT * 0.5f + 60.f;   // 继续按钮
@@ -139,6 +181,7 @@ void MainSceneUILayer::InitAllButtons() {
         Vec2{UITheme::MainBtnW, UITheme::MainBtnH},
         "继续游戏");
     resumeButton->SetOnClick([this](){ isPausing = false; });
+    ui.Add(pauseGroupId, resumeButton.get());
 
     restartButton = std::make_shared<ButtonSprite>(
         ButtonSprite::Style::Secondary,
@@ -149,6 +192,7 @@ void MainSceneUILayer::InitAllButtons() {
         isPausing = false;
         if (onRestartCallback) onRestartCallback();
     });
+    ui.Add(pauseGroupId, restartButton.get());
 
     homeButtonInPanel = std::make_shared<ButtonSprite>(
         ButtonSprite::Style::Secondary,
@@ -158,6 +202,7 @@ void MainSceneUILayer::InitAllButtons() {
     homeButtonInPanel->SetOnClick([](){
         SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
     });
+    ui.Add(pauseGroupId, homeButtonInPanel.get());
 }
 
 void MainSceneUILayer::Reset() {
@@ -168,27 +213,12 @@ void MainSceneUILayer::Reset() {
     restartButton->Reset();
     homeButtonInPanel->Reset();
     isPausing = false;
+    // 残留的悬停/按下视觉一并清掉（注册关系保留，控件仍属本图层）
+    UISystem::Get().ClearWidgetState(hudGroupId);
+    UISystem::Get().ClearWidgetState(pauseGroupId);
+    SyncInputGroups();
 }
 
 bool MainSceneUILayer::GetPauseState() const {
     return isPausing;
-}
-
-bool MainSceneUILayer::IsPointerOverButtons() const {
-    const float mx = Input::GetMouseX();
-    const float my = Input::GetMouseY();
-
-    // 与 ButtonSprite::HandleInput 相同的包围盒判定（用按钮自身实时位置/尺寸）
-    auto over = [&mx, &my](const std::shared_ptr<ButtonSprite>& btn) {
-        if (!btn || !btn->getActive()) return false;
-        const Vec2& p = btn->GetPosition();
-        const Vec2& s = btn->GetScale();
-        return mx > p.x - s.x * 0.5f && mx < p.x + s.x * 0.5f &&
-               my > p.y - s.y * 0.5f && my < p.y + s.y * 0.5f;
-    };
-
-    if (isPausing) {
-        return over(resumeButton) || over(restartButton) || over(homeButtonInPanel);
-    }
-    return over(pauseButton) || over(homeButton) || over(quitButton);
 }

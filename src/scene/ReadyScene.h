@@ -1,12 +1,14 @@
 #pragma once
 #include "Scene.h"
+#include "../ui/UIWidget.h"   // 内联热区控件（分裂行/模式按钮/升级面板）需完整类型
+#include "../ui/GameInput.h"  // 作为 IGameInputSink 订阅推送式输入（ESC 关面板）
 #include <vector>
 #include <memory>
 
 class Sprite;
 class ButtonSprite;
 
-class ReadyScene : public Scene {
+class ReadyScene : public Scene, public IGameInputSink {
 public:
     ReadyScene();
     ~ReadyScene();
@@ -17,7 +19,13 @@ public:
     void Render(SpriteRenderer& renderer) override;
     void Reset() override;
 
+    // IGameInputSink：接收 UISystem 每帧推送的已裁决输入快照（本场景只读 ESC）
+    void OnGameInput(const GameInputFrame& frame) override { gameInput = frame; }
+
 private:
+    // 本帧输入快照（由 OnGameInput 推送；Update 只读它，不再询设备）
+    GameInputFrame gameInput;
+
     std::vector<std::shared_ptr<ButtonSprite>> menuButtons;
     std::shared_ptr<ButtonSprite> achievementEntry; // 右上角奖杯：直达成就视图（B7）
 
@@ -49,7 +57,7 @@ private:
     // ===== 开始按钮分裂式模式选择（B9 改版）：悬停触发，替代旧模式选择覆盖层 =====
     // 悬停"开始游戏"0.2s -> 按钮横向分裂成三个模式按钮（自中心滑出+展宽+淡入）；
     // 光标停留在整行横向区域内维持分裂，离开区域后平滑收缩回单按钮；
-    // 悬停单个模式按钮 0.5s -> 光标旁淡入极小解释框；点击模式按钮（带点击音效）
+    // 悬停单个模式按钮 0.5s -> 光标旁淡入极小解释框；点击模式按钮（点击音效由 UISystem 集中播放）
     // 开始对应模式，点击后保持分裂状态直到转场切场景（返回主菜单时由 Reset 复位）。
     static constexpr float StartBtnY = 600.0f;     // 开始按钮行中心 y（InitButtons 布局共用）
     static constexpr float ModeSubBtnW = 112.0f;   // 分裂后单个模式按钮宽
@@ -63,7 +71,17 @@ private:
     float modeHoverTimer = 0.0f;      // 该模式按钮连续悬停计时
     int   tipIndex = -1;              // 解释框当前展示的模式下标
     float tipFade = 0.0f;             // 解释框淡入淡出进度
-    void UpdateModeSplit(float dt);   // 悬停计时与分裂进度推进（含模式按钮点击）
+
+    // ===== UI 交互控件（区域判定与事件派发均属 UISystem） =====
+    int menuGroupId = -1;     // 主菜单：菜单按钮 + 奖杯入口 + 分裂行/模式按钮
+    int upgradeGroupId = -1;  // 护盾升级面板（模态：弹开期间主菜单整体让位）
+    UIWidget startRowZone;    // 分裂后维持展开的整行区域（无自身绘制）
+    UIWidget modeZones[3];    // 三个模式按钮热区
+    UIWidget coinEntry;       // 右上角金币入口（打开升级面板）
+    UIWidget buyZones[2];     // 两条升级轨道的购买热区（个数与 PlayerProfile::TrackCount 一致）
+    UIWidget upgradeBackZone; // 升级面板“返回”热区
+
+    void UpdateModeSplit(float dt);   // 悬停计时与分裂进度推进（悬停事实读自控件，不再自行判定）
     void DrawStartButtonRow();        // 分裂/收缩动效绘制（合并态由 ButtonSprite 绘制）
     void DrawModeTipBox();            // 光标旁的模式解释小框
     void DrawSplitButtonPlate(float cx, float cy, float w, float h, float alpha,

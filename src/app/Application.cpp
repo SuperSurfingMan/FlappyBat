@@ -15,6 +15,7 @@
 #include "../Math.h"
 #include "../font/FontManager.h"
 #include "../res/ResourceManager.h"
+#include "../ui/UISystem.h"
 
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
@@ -212,10 +213,17 @@ void Application::Run()
         }
 
         Input::Update();
-        
+
+        // ===== UI 事件派发：每帧一次集中命中判定，先于场景逻辑 =====
+        // 控件不再自行轮询鼠标；Dispatch 之后本帧的鼠标归属与"按键是否被 UI 消费"已确定
+        UISystem::Get().BeginFrame(dt);
+        UISystem::Get().Dispatch();
+
         AudioSystem::Instance().Update(); // 更新音频系统，清理已完成的音效
         sceneManager->GetCurrentScene()->Update(dt);
         sceneManager->GetCurrentScene()->Render(*spriteRenderer);
+
+        UISystem::Get().EndFrame();
 
         spriteRenderer->End();
 

@@ -17,7 +17,10 @@ public:
     void Reset() override;
 
     void SetRestartEvent(std::function<void()> event) { onRestart = std::move(event); }
-    void ActivateLayer() { layerActive = true; }
+    void ActivateLayer();
+
+    // 结算面板是否参与交互：离开主场景时由 MainScene 置 false（面板仍可能处于激活展示态）
+    void SetInteractive(bool interactive);
 
     void SetCurrentScore(int s) { currentScore = s; }
     void SetBestScore(int s) { bestScore = s; }
@@ -33,6 +36,10 @@ private:
     std::shared_ptr<Sprite> gameOverTextSprite;   // GAME OVER 标题图
 
     bool layerActive = false;
+    bool interactive = true;
+
+    // UI 组 id（模态）：面板弹出期间仅本组控件可命中
+    int overGroupId = -1;
 
     float blinkInterval = 2.0f;
     Timer blinkTimer;
@@ -47,4 +54,5 @@ private:
     void InitSprites();
     void ResetAnimState();
     void DrawImGUILayout();
+    void SyncInputGroups();
 };

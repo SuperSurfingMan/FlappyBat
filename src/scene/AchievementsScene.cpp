@@ -2,12 +2,12 @@
 #include "../sprite/ButtonSprite.h"
 #include "../ui/UIBuilder.h"
 #include "../ui/UITheme.h"
+#include "../ui/UISystem.h"
 #include "../res/ResourceManager.h"
 #include "../sprite/Sprite.h"
 #include "../Config.h"
 #include "../app/Application.h"
 #include "../app/Achievements.h"
-#include "../Input.h"
 #include "SceneManager.h"
 #include "imgui.h"
 
@@ -41,6 +41,22 @@ AchievementsScene::AchievementsScene() {
     backToReady->SetOnClick([](){
         SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
     });
+
+    // ===== UI 控件组与热区登记（矩形在 DrawAchievements 中与绘制同源） =====
+    // 注册顺序决定层叠：滚轮区（最大面积）< 滑轨 < 滑块（优先被抓取）
+    UISystem& ui = UISystem::Get();
+    achGroupId = ui.CreateGroup(20); // 与其它场景主控件同层
+    ui.Add(achGroupId, backToReady.get());
+
+    listZone.SetPlayFeedbackSFX(false);
+    ui.Add(achGroupId, &listZone);
+
+    scrollTrack.SetPlayFeedbackSFX(false);
+    ui.Add(achGroupId, &scrollTrack);
+
+    scrollThumb.SetPlayFeedbackSFX(false);
+    scrollThumb.SetCaptureOnPress(true);
+    ui.Add(achGroupId, &scrollThumb);
 }
 
 AchievementsScene::~AchievementsScene() {}
@@ -48,10 +64,12 @@ AchievementsScene::~AchievementsScene() {}
 void AchievementsScene::OnEnter() {
     // 每次进入成就列表回到顶部
     achScroll = achScrollTarget = 0.f;
-    achScrollbarDragging = false;
+    UISystem::Get().SetGroupEnabled(achGroupId, true);
 }
 
-void AchievementsScene::OnExit() {}
+void AchievementsScene::OnExit() {
+    UISystem::Get().SetGroupEnabled(achGroupId, false);
+}
 
 void AchievementsScene::Update(float dt) {
     background->Update(dt);
@@ -69,9 +87,9 @@ void AchievementsScene::Render(SpriteRenderer& renderer) {
 
 void AchievementsScene::Reset() {
     achScroll = achScrollTarget = 0.f;
-    achScrollbarDragging = false;
     backToReady->Reset();
     background->Reset();
+    UISystem::Get().ClearWidgetState(achGroupId);
 }
 
 // ===== 成就列表（B7）：与榜单同款的可滚动列表（滚轮/滑块拖拽/轨道翻页） =====
@@ -115,49 +133,42 @@ void AchievementsScene::DrawAchievements() {
     const float thumbRange = std::max(1.f, trackH - thumbH);
 
     ImGuiIO& io = ImGui::GetIO();
-    const float mouseX = Input::GetMouseX();
-    const float mouseY = Input::GetMouseY();
 
-    // ===== 滚动交互（与榜单一致） =====
-    if (scrollable) {
-        const float thumbTop = trackTop + (achScroll / maxScroll) * thumbRange;
-        const bool thumbHovered = !achScrollbarDragging &&
-            mouseX >= trackX - 9.f && mouseX <= trackX + 9.f &&
-            mouseY >= thumbTop - 5.f && mouseY <= thumbTop + thumbH + 5.f;
-        const bool trackHovered =
-            mouseX >= trackX - 11.f && mouseX <= trackX + 11.f &&
-            mouseY >= trackTop && mouseY <= trackTop + trackH;
+    // 滑块顶部（拖拽/翻页/绘制共用）；不可滚动时退化为轨道顶，避免除零
+    const float thumbTop = scrollable ? trackTop + (achScroll / maxScroll) * thumbRange : trackTop;
+    const bool  dragging = scrollThumb.IsCaptured();
 
-        const bool mouseInPanel = mouseX >= panelLeft && mouseX <= panelRight &&
-                                  mouseY >= panelTop  && mouseY <= panelBottom;
-        if (mouseInPanel && io.MouseWheel != 0.f) {
-            achScrollTarget -= io.MouseWheel * rowH * 2.f;
-        }
+    // ===== 滚动交互登记：热区几何与绘制同源，命中判定与派发归 UISystem =====
+    // 悬停面板任意位置即可滚轮滚动（一步约两行）
+    listZone.SetRect(UIRect::FromBounds(panelLeft, panelTop, panelRight, panelBottom));
+    listZone.SetEnabled(scrollable);
+    listZone.SetOnWheel([this, rowH](const UIEvent& e) {
+        achScrollTarget -= e.wheel * rowH * 2.f;
+    });
 
-        if (Input::IsMousePressed(0)) {
-            if (thumbHovered) {
-                achScrollbarDragging = true;
-                achScrollbarGrabOffset = mouseY - thumbTop;
-            } else if (trackHovered) {
-                achScrollTarget += (mouseY < thumbTop) ? -viewH : viewH;
-            }
-        }
+    // 滑轨空白区：点击向点击方向翻一页
+    scrollTrack.SetRect(UIRect::FromBounds(trackX - 11.f, trackTop,
+                                           trackX + 11.f, trackTop + trackH));
+    scrollTrack.SetEnabled(scrollable);
+    scrollTrack.SetOnClick([this, thumbTop, viewH]() {
+        achScrollTarget += (UISystem::Get().GetPointer().y < thumbTop) ? -viewH : viewH;
+    });
 
-        if (achScrollbarDragging) {
-            if (Input::IsMouseDown(0)) {
-                const float newTop = mouseY - achScrollbarGrabOffset;
-                achScroll = achScrollTarget = (newTop - trackTop) / thumbRange * maxScroll;
-            } else {
-                achScrollbarDragging = false;
-            }
-        }
-    } else {
-        achScrollbarDragging = false;
-    }
+    // 滑块：命中区略大于绘制宽度便于抓取；按下即捕获，拖拽直接定位（不做平滑）
+    scrollThumb.SetRect(UIRect::FromBounds(trackX - 9.f, thumbTop - 5.f,
+                                           trackX + 9.f, thumbTop + thumbH + 5.f));
+    scrollThumb.SetEnabled(scrollable);
+    scrollThumb.SetOnPress([this, thumbTop](const UIEvent& e) {
+        achScrollbarGrabOffset = e.downPointer.y - thumbTop;
+    });
+    scrollThumb.SetOnDrag([this, trackTop, thumbRange, maxScroll](const UIEvent& e) {
+        const float newTop = e.pointer.y - achScrollbarGrabOffset;
+        achScroll = achScrollTarget = (newTop - trackTop) / thumbRange * maxScroll;
+    });
 
     // 收敛 + 平滑趋近
     achScrollTarget = std::clamp(achScrollTarget, 0.f, maxScroll);
-    if (scrollable && !achScrollbarDragging) {
+    if (scrollable && !dragging) {
         const float t = 1.f - std::exp(-14.f * io.DeltaTime);
         achScroll += (achScrollTarget - achScroll) * t;
         if (std::fabs(achScrollTarget - achScroll) < 0.5f) achScroll = achScrollTarget;
@@ -231,14 +242,12 @@ void AchievementsScene::DrawAchievements() {
         UITheme::ToImU32({0.07f, 0.05f, 0.13f}, 0.85f), UITheme::ToImU32({0.07f, 0.05f, 0.13f}, 0.85f));
 
     // ===== 右侧滑块（金色，hover 提亮、拖拽最亮） =====
-    const float curTop = trackTop + (achScroll / maxScroll) * thumbRange;
-    const bool thumbHot = achScrollbarDragging ||
-        (mouseX >= trackX - 9.f && mouseX <= trackX + 9.f &&
-         mouseY >= curTop - 5.f && mouseY <= curTop + thumbH + 5.f);
+    const float curTop = thumbTop;
+    const bool thumbHot = dragging || scrollThumb.IsHovered();
 
     dl->AddRectFilled(ImVec2(trackX - 3.f, trackTop), ImVec2(trackX + 3.f, trackTop + trackH),
                       UITheme::ToImU32(UITheme::AmberDim, 0.30f), 3.0f);
-    const ImU32 thumbCol = achScrollbarDragging ? UITheme::ToImU32({1.0f, 0.87f, 0.52f})
+    const ImU32 thumbCol = dragging         ? UITheme::ToImU32({1.0f, 0.87f, 0.52f})
                           : thumbHot            ? UITheme::ToImU32(UITheme::Amber)
                                                 : UITheme::ToImU32(UITheme::Amber, 0.85f);
     dl->AddRectFilled(ImVec2(trackX - 4.5f, curTop), ImVec2(trackX + 4.5f, curTop + thumbH),

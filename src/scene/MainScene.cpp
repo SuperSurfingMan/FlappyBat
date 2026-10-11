@@ -9,7 +9,7 @@
 
 #include "../res/ResourceManager.h"
 #include "../audio/AudioSystem.h"
-#include "../Input.h"
+#include <GLFW/glfw3.h>   // 仅取 GLFW_KEY_* / GLFW_MOUSE_BUTTON_* 常量（输入由 UISystem 推送）
 #include "imgui.h"
 #include "SceneManager.h"
 #include "ReadyScene.h"
@@ -27,7 +27,13 @@
 #include "../app/PlayerProfile.h"
 #include "../ui/UIBuilder.h"
 #include "../ui/UITheme.h"
+#include "../ui/UISystem.h"
 #include "../ui/TransitionMask.h"
+
+namespace {
+// 局内 HUD 交互组层叠：低于暂停面板(40)/结算面板(50)，与顶部图标排(10) 同时参与命中
+constexpr int kLayerMainHud = 12;
+}
 
 // GameMode -> ScoreRank::RankMode：两枚举成员一一对应，显式映射避免隐式耦合
 static ScoreRank::RankMode ToRankMode(MainScene::GameMode m) {
@@ -83,6 +89,20 @@ MainScene::MainScene()
     mainSceneUILayer = std::make_shared<MainSceneUILayer>();
     mainSceneOverLayer = std::make_shared<MainSceneOverLayer>();
 
+    // ===== 局内 HUD 交互控件：能量图标热区 =====
+    // 命中矩形与绘制几何同源（GetEnergyIconRect）；可点与否由 SetEnabled 逐帧同步，
+    // 鼠标判定不再出现在本场景代码里
+    hudGroupId = UISystem::Get().CreateGroup(kLayerMainHud);
+    energyIcon.SetPlayFeedbackSFX(false); // 原实现无音效，保持听感不变
+    energyIcon.SetOnClick([this]() { TryReleaseShield(); });
+    UISystem::Get().Add(hudGroupId, &energyIcon);
+
+    // 玩法操控的按键集：声明给 UISystem，本场景只读它推送的回帧快照
+    UISystem::Get().WatchKeys({GLFW_KEY_SPACE, GLFW_KEY_W, GLFW_KEY_UP,
+                               GLFW_KEY_S, GLFW_KEY_DOWN,
+                               GLFW_KEY_A, GLFW_KEY_D, GLFW_KEY_LEFT, GLFW_KEY_RIGHT,
+                               GLFW_KEY_F});
+
     // 成就解锁提示（底部居中，带专属面板背景；任何阶段都可能弹出）
     auto achToast = std::make_shared<ToastLayer>(2.5f, "", Vec3{0.941f, 0.722f, 0.314f}, 26.0f,
                                                  Vec2{270.0f, 838.0f});
@@ -115,6 +135,15 @@ MainScene::~MainScene()
 
 void MainScene::OnEnter()
 {
+    // 接管玩法输入推送（OnExit 注销：非当前场景不应再收到回帧）
+    // 同时为 UI 图层注册一份订阅：它只读暂停快捷键（ESC/P/R），与玩法 sink 并存
+    UISystem& ui = UISystem::Get();
+    ui.AddGameInputSink(this);
+    ui.AddGameInputSink(std::static_pointer_cast<MainSceneUILayer>(mainSceneUILayer).get());
+
+    // 重新进入本场景：恢复 HUD 与结算面板的交互能力（OnExit 处已关闭）
+    std::static_pointer_cast<MainSceneOverLayer>(mainSceneOverLayer)->SetInteractive(true);
+
     // 开始循环播放雨声环境音（均匀、平缓）
     AudioSystem::Instance().PlayAmbient("assets/Audio/Sound Effects/Rain.wav", true, 0.4f);
     rainSystem->SetLightningWarnLead(params().lightningWarnLead); // 落雷预警提前量（随模式差异化）
@@ -143,6 +172,15 @@ void MainScene::OnExit()
     // 停止雨声环境音
     AudioSystem::Instance().StopAmbient();
 
+    // 停止玩法与 UI 快捷键的输入推送
+    UISystem& ui = UISystem::Get();
+    ui.RemoveGameInputSink(this);
+    ui.RemoveGameInputSink(std::static_pointer_cast<MainSceneUILayer>(mainSceneUILayer).get());
+
+    // 局内 UI 交互全部关闭：本场景控件残留在 UISystem 中会在其它场景抢下点击
+    SetHudInteractive(false);
+    std::static_pointer_cast<MainSceneOverLayer>(mainSceneOverLayer)->SetInteractive(false);
+
     // 离开主场景（暂停面板"返回主菜单"、右上角 Home、程序退出等）时，
     // 自动把本局分数写入当前模式的排行榜；已保存过（死亡结算）则跳过
     if (!scoreSavedThisRun) {
@@ -169,6 +207,12 @@ void MainScene::Update(float dt)
     // 天气事件消息盒：闪烁计时 + 雷击事件轮询（阵风/风暴档位在各自更新点驱动）
     UpdateWeatherFeed(dt);
 
+    // ===== UI 交互闸门：入场倒数/结算期间局内按钮与能量图标一律不响应 =====
+    // （结算面板自己的按钮组由 OverLayer 按 layerActive 管理，不受本闸门影响）
+    const bool uiInteractive = !gameOver && introPhase == IntroPhase::None;
+    SetHudInteractive(uiInteractive);
+    if (uiInteractive) mainSceneUILayer->Update(dt);
+
     if (gameOver) {
         mainSceneOverLayer->Update(dt);
         return;
@@ -184,17 +228,14 @@ void MainScene::Update(float dt)
         return;
     }
 
-    if (!gameOver) {
-        mainSceneUILayer->Update(dt);        
-        // collisionEnabled 语义: 碰撞是否发生
-        if (std::static_pointer_cast<MainSceneUILayer>(mainSceneUILayer)->GetPauseState() || !collisionEnabled) {
-            rainSystem->SetScrollSpeed(0.0f);
-            if (!collisionEnabled) {
-                rainSystem->Update(dt);
-                bat->Update(dt);                
-            }
-            return;
+    // collisionEnabled 语义: 碰撞是否发生
+    if (std::static_pointer_cast<MainSceneUILayer>(mainSceneUILayer)->GetPauseState() || !collisionEnabled) {
+        rainSystem->SetScrollSpeed(0.0f);
+        if (!collisionEnabled) {
+            rainSystem->Update(dt);
+            bat->Update(dt);
         }
+        return;
     }
 
     UpdateBackground(dt);
@@ -205,9 +246,9 @@ void MainScene::Update(float dt)
     UpdateItems(dt);
     UpdateOrb(dt);       // 巨化星（B6-b）
     UpdateGiant(dt);     // 巨化计时与撞飞判定（B6-b）
-    // 输入意图：俯冲（S/↓，B6-a；急坠移动语义由场景实现，Boss 战接触判定由怪物侧完成）
-    const bool diveRequested = Input::IsKeyPressed(GLFW_KEY_S) ||
-                               Input::IsKeyPressed(GLFW_KEY_DOWN);
+    // 输入意图（由 UISystem 推送的本帧快照）：俯冲（S/↓，B6-a；急坠移动语义由场景实现，Boss 战接触判定由怪物侧完成）
+    const bool diveRequested = gameInput.Pressed(GLFW_KEY_S) ||
+                               gameInput.Pressed(GLFW_KEY_DOWN);
     UpdateGust(dt); // 阵风（A4-b）：先修改垂直速度，再由 UpdateBat 积分位置
     windRenderer.Update(gustTimer > 0.0f, gustForce, dt); // 风线可视化（仅生效期显示；预警期无气流）
     UpdateBat(dt, diveRequested);
@@ -221,7 +262,7 @@ void MainScene::Update(float dt)
     uiPulseTimer += dt;
     if (shieldTimer > 0.0f) shieldTimer = std::max(0.0f, shieldTimer - dt);
     // 能量充满后按空格释放护盾
-    if (Input::IsKeyPressed(GLFW_KEY_SPACE)) {
+    if (gameInput.Pressed(GLFW_KEY_SPACE)) {
         TryReleaseShield();
     }
 
@@ -276,10 +317,9 @@ void MainScene::Update(float dt)
         ectx.terrainY = terrain_height;
         ectx.screenW = (float)Config::GetInstance().GetScreenWidth();
         ectx.screenH = (float)Config::GetInstance().GetScreenHeight();
-        // 输入意图（采集在此并剔除 UI 占用；怪物按需消费，无消费者则空转）
-        ectx.firePrimary = (Input::IsMousePressed(GLFW_MOUSE_BUTTON_RIGHT) &&
-                            !IsPointerOverInteractiveUI()) ||
-                           Input::IsKeyPressed(GLFW_KEY_F);
+        // 输入意图（取自 UISystem 推送的本帧已裁决快照：悬停在控件上的右键不会下发）
+        ectx.firePrimary = gameInput.PointerPressed(GLFW_MOUSE_BUTTON_RIGHT) ||
+                           gameInput.Pressed(GLFW_KEY_F);
         ectx.diveRequested = diveRequested;
         ectx.batDiving = diveTimer > 0.0f;  // 俯冲急坠中（怪物本体接触判定：俯冲撞击）
         ectx.batParry = diveIframe > 0.0f;  // 俯冲无敌帧窗口（弹反判定，§4.1 三期）
@@ -492,6 +532,7 @@ void MainScene::Reset()
 
     mainSceneUILayer->Reset();
     mainSceneOverLayer->Reset();
+    UISystem::Get().ClearWidgetState(hudGroupId); // 能量图标残留高亮复位
 }
 
 void MainScene::UpdateBat(float dt, bool diveRequested) {
@@ -517,39 +558,29 @@ void MainScene::UpdateBat(float dt, bool diveRequested) {
             batSprite->Falling(dt);             // 复用位置积分与窗口边界钳制（贴地俯冲被钳在地面线上）
         } else {
             batSprite->Falling(dt);
-            // 鼠标左键（仅点击非按钮区域，按钮上的点击由按钮自身消费）
-            // 或 键盘（空格/W/上箭头）按下 -> 振翅
-            bool flapByMouse = Input::IsMousePressed(GLFW_MOUSE_BUTTON_LEFT) &&
-                               !IsPointerOverInteractiveUI();
-            bool flapByKeyboard = Input::IsKeyPressed(GLFW_KEY_SPACE) ||
-                                  Input::IsKeyPressed(GLFW_KEY_W) ||
-                                  Input::IsKeyPressed(GLFW_KEY_UP);
+            // 鼠标左键 / 键盘（空格・W・↑）：均取已裁决快照，落在控件上的点击不会下发到玩法
+            bool flapByMouse = gameInput.PointerPressed(GLFW_MOUSE_BUTTON_LEFT);
+            bool flapByKeyboard = gameInput.Pressed(GLFW_KEY_SPACE) ||
+                                  gameInput.Pressed(GLFW_KEY_W) ||
+                                  gameInput.Pressed(GLFW_KEY_UP);
             if (flapByMouse || flapByKeyboard) {
                 batSprite->JumpNow();
                 AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Fly), 0.8f);
             }
         }
-        // A/D 或 ←/→ 持续按住 -> 横向移动（躲避全高雷柱；注意用 IsKeyDown 持续语义）
+        // A/D 或 ←/→ 持续按住 -> 横向移动（躲避全高雷柱；注意用 Held 持续语义）
         float hDir = 0.0f;
-        if (Input::IsKeyDown(GLFW_KEY_A) || Input::IsKeyDown(GLFW_KEY_LEFT)) hDir -= 1.0f;
-        if (Input::IsKeyDown(GLFW_KEY_D) || Input::IsKeyDown(GLFW_KEY_RIGHT)) hDir += 1.0f;
+        if (gameInput.Held(GLFW_KEY_A) || gameInput.Held(GLFW_KEY_LEFT)) hDir -= 1.0f;
+        if (gameInput.Held(GLFW_KEY_D) || gameInput.Held(GLFW_KEY_RIGHT)) hDir += 1.0f;
         batSprite->SetHorizontalSpeed(hDir * BatSprite::HorizontalMoveSpeed);
     }
     batSprite->Update(dt);
 }
 
-bool MainScene::IsPointerOverInteractiveUI() const {
-    auto uiLayerCast = std::static_pointer_cast<MainSceneUILayer>(mainSceneUILayer);
-    if (uiLayerCast->IsPointerOverButtons()) return true;
-
-    // 能量图标：仅在充满、可点按释放护盾时视为按钮
-    if (energy >= 1.0f) {
-        float icx, icy, isize;
-        GetEnergyIconRect(icx, icy, isize);
-        return std::abs(Input::GetMouseX() - icx) < isize * 0.5f &&
-               std::abs(Input::GetMouseY() - icy) < isize * 0.5f;
-    }
-    return false;
+// 局内 HUD 与顶部按钮排的交互闸门（结算面板组不受影响，由 OverLayer 自管）
+void MainScene::SetHudInteractive(bool interactive) {
+    UISystem::Get().SetGroupEnabled(hudGroupId, interactive);
+    std::static_pointer_cast<MainSceneUILayer>(mainSceneUILayer)->SetInteractive(interactive);
 }
 
 namespace {
@@ -1151,15 +1182,12 @@ void MainScene::DrawEnergyHUD() {
     float pulse = 0.5f + 0.5f * sin(uiPulseTimer * 6.0f); // 0~1 脉冲
 
     // ===== 图标（闪电） =====
-    // 点击命中检测：仅在能量充满时可点按释放
-    float mx = Input::GetMouseX(), my = Input::GetMouseY();
-    bool iconHovered = isFull && std::abs(mx - iconCx) < iconSize * 0.5f
-                              && std::abs(my - rowY) < iconSize * 0.5f;
-    if (iconHovered && Input::IsMousePressed(GLFW_MOUSE_BUTTON_LEFT)) {
-        TryReleaseShield();
-    }
+    // 命中区与绘制共用同一份几何；仅能量充满时启用，未充满时点击自然透传给振翅
+    energyIcon.SetRect(UIRect::FromCenter(iconCx, rowY, iconSize, iconSize));
+    energyIcon.SetEnabled(isFull);
+    const bool iconHovered = energyIcon.IsHovered();
 
-    UIBuilder::DrawIconBackground(iconCx, rowY, iconSize, iconHovered, false);
+    UIBuilder::DrawIconBackground(iconCx, rowY, iconSize, iconHovered, energyIcon.IsPressed());
     {
         // 闪电符号：上下两个三角形拼成
         ImU32 boltCol = isActive ? UITheme::ToImU32(UITheme::Moonlight)

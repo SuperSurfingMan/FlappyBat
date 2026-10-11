@@ -2,12 +2,12 @@
 #include "../sprite/ButtonSprite.h"
 #include "../ui/UIBuilder.h"
 #include "../ui/UITheme.h"
+#include "../ui/UISystem.h"
 #include "../res/ResourceManager.h"
 #include "../sprite/Sprite.h"
 #include "../Config.h"
 #include "../app/Application.h"
 #include "../audio/AudioSystem.h"
-#include "../Input.h"
 #include "../scene/SceneManager.h"
 #include "imgui.h"
 
@@ -38,6 +38,33 @@ SettingsScene::SettingsScene() {
     backToReady->SetOnClick([](){
         SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
     });
+
+    // UI 控件组：返回按钮与三条滑条均登记到 UISystem；滑条按下即捕获（拖出轨道仍跟随）
+    UISystem& ui = UISystem::Get();
+    settingsGroupId = ui.CreateGroup(20); // 与其它场景主控件同层
+    ui.Add(settingsGroupId, backToReady.get());
+    for (int i = 0; i < 3; ++i) {
+        sliders[i].SetCaptureOnPress(true);
+        sliders[i].SetPlayFeedbackSFX(false); // 拖动过程不发声（与旧实现一致）
+        ui.Add(settingsGroupId, &sliders[i]);
+    }
+}
+
+float& SettingsScene::VolumeRef(int idx) {
+    switch (idx) {
+        case 1:  return bgmVolume;
+        case 2:  return sfxVolume;
+        default: return masterVolume;
+    }
+}
+
+void SettingsScene::ApplyVolume(int idx, float v) {
+    switch (idx) {
+        case 0: AudioSystem::Instance().SetMasterVolume(v); break;
+        case 1: AudioSystem::Instance().SetBGMVolume(v);    break;
+        case 2: AudioSystem::Instance().SetSFXVolume(v);    break;
+    }
+    AudioSystem::Instance().SaveSettings(); // 滑块改变即实时应用并持久化
 }
 
 SettingsScene::~SettingsScene() {}
@@ -45,10 +72,12 @@ SettingsScene::~SettingsScene() {}
 void SettingsScene::OnEnter() {
     // 进入时从音频系统读取当前音量到本地缓存（供滑块显示）
     SyncFromAudioSystem();
+    UISystem::Get().SetGroupEnabled(settingsGroupId, true);
 }
 
 void SettingsScene::OnExit() {
-    draggingSlider = -1; // 离开场景时终止拖拽状态
+    // 离开本页：关闭控件组（拖动中的捕获会由 UISystem 自动 Cancel）
+    UISystem::Get().SetGroupEnabled(settingsGroupId, false);
 }
 
 void SettingsScene::Update(float dt) {
@@ -63,8 +92,8 @@ void SettingsScene::Render(SpriteRenderer& renderer) {
 
 void SettingsScene::Reset() {
     if (backToReady) backToReady->Reset();
-    draggingSlider = -1;
     SyncFromAudioSystem();
+    UISystem::Get().ClearWidgetState(settingsGroupId);
 }
 
 void SettingsScene::SyncFromAudioSystem() {
@@ -92,8 +121,6 @@ void SettingsScene::DrawImGuiLayout() {
     const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     ImFont* font = UIBuilder::GetFont();
-    const float mx = Input::GetMouseX();
-    const float my = Input::GetMouseY();
 
     // ===== 标题 =====
     UIBuilder::DrawCenteredText("声音设置", WIN_WIDTH * 0.5f, WIN_HEIGHT - 230.f,
@@ -124,37 +151,21 @@ void SettingsScene::DrawImGuiLayout() {
     // ===== 三行音量数据 =====
     const char* labels[3] = { "全局音量", "背景音乐", "音效" };
     float* values[3] = { &masterVolume, &bgmVolume, &sfxVolume };
-    auto applyValue = [](int idx, float v) {
-        switch (idx) {
-            case 0: AudioSystem::Instance().SetMasterVolume(v); break;
-            case 1: AudioSystem::Instance().SetBGMVolume(v);    break;
-            case 2: AudioSystem::Instance().SetSFXVolume(v);    break;
-        }
-        AudioSystem::Instance().SaveSettings(); // 滑块改变即实时应用并持久化
-    };
 
-    // ===== 拖拽交互：点击轨道任意处跳转，按住后跟随鼠标，松开结束 =====
-    if (Input::IsMousePressed(0)) {
-        for (int i = 0; i < 3; ++i) {
-            const float trackY = row1TrackY + (float)i * rowPitch;
-            if (mx >= trackLeft - kVolThumbR && mx <= trackRight + kVolThumbR &&
-                my >= trackY - kVolThumbR - 8.f && my <= trackY + kVolThumbR + 8.f) {
-                draggingSlider = i;
-                break;
+    // ===== 拖拽交互登记：热区与滑轨几何同源，判定与派发归 UISystem =====
+    // 按下即定位（按下当帧也会收到一次 Drag），按住后跟随光标，松开结束
+    for (int i = 0; i < 3; ++i) {
+        const float trackY = row1TrackY + (float)i * rowPitch;
+        sliders[i].SetRect(UIRect::FromBounds(trackLeft - kVolThumbR, trackY - kVolThumbR - 8.f,
+                                              trackRight + kVolThumbR, trackY + kVolThumbR + 8.f));
+        sliders[i].SetOnDrag([this, i, trackLeft, trackW](const UIEvent& e) {
+            const float t = std::clamp((e.pointer.x - trackLeft) / trackW, 0.f, 1.f);
+            float& v = VolumeRef(i);
+            if (t != v) {
+                v = t;
+                ApplyVolume(i, t);
             }
-        }
-    }
-    if (draggingSlider >= 0) {
-        if (Input::IsMouseDown(0)) {
-            const float t = std::clamp((mx - trackLeft) / trackW, 0.f, 1.f);
-            const int i = draggingSlider;
-            if (t != *values[i]) {
-                *values[i] = t;
-                applyValue(i, t);
-            }
-        } else {
-            draggingSlider = -1; // 松开结束拖拽
-        }
+        });
     }
 
     // 带阴影文字（左对齐 / 右对齐）
@@ -174,7 +185,10 @@ void SettingsScene::DrawImGuiLayout() {
         const float trackY = row1TrackY + (float)i * rowPitch;
         const float value  = *values[i];
         const float thumbX = trackLeft + value * trackW;
-        const bool active  = (draggingSlider == i);
+        const bool active  = sliders[i].IsCaptured();
+        // 悬停/拖拽中高亮整行滑轨（命中区为整条滑轨，滑块与轨道一致亮起）
+        const bool trackHot = active || sliders[i].IsHovered();
+        const bool thumbHot = trackHot;
 
         // 行间分隔线（暗金，与榜单行分隔同款）
         if (i > 0) {
@@ -195,9 +209,6 @@ void SettingsScene::DrawImGuiLayout() {
                  UITheme::ToImU32(UITheme::Amber), true);
 
         // 滑轨：暗槽胶囊（悬停提亮）+ 金色已填充胶囊
-        const bool trackHot = active ||
-            (mx >= trackLeft && mx <= trackRight &&
-             std::fabs(my - trackY) <= kVolThumbR + 6.f);
         dl->AddRectFilled(ImVec2(trackLeft, trackY - kVolTrackH * 0.5f),
                           ImVec2(trackRight, trackY + kVolTrackH * 0.5f),
                           UITheme::ToImU32({0.12f, 0.10f, 0.18f}, trackHot ? 1.0f : 0.9f),
@@ -211,9 +222,6 @@ void SettingsScene::DrawImGuiLayout() {
         }
 
         // 滑块圆钮：阴影 + 金色主体 + 内环高光（与金币 HUD 同款质感）
-        const bool thumbHot = active ||
-            (std::fabs(mx - thumbX) <= kVolThumbR + 6.f &&
-             std::fabs(my - trackY) <= kVolThumbR + 6.f);
         const ImU32 thumbCol = active   ? UITheme::ToImU32({1.0f, 0.87f, 0.52f})
                              : thumbHot ? UITheme::ToImU32(UITheme::Amber)
                                         : UITheme::ToImU32(UITheme::Amber, 0.95f);
