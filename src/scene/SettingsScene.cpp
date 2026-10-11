@@ -42,11 +42,12 @@ SettingsScene::SettingsScene() {
     // UI 控件组：返回按钮与三条滑条均登记到 UISystem；滑条按下即捕获（拖出轨道仍跟随）
     UISystem& ui = UISystem::Get();
     settingsGroupId = ui.CreateGroup(20); // 与其它场景主控件同层
-    ui.Add(settingsGroupId, backToReady.get());
+    ui.Add(settingsGroupId, backToReady);
     for (int i = 0; i < 3; ++i) {
-        sliders[i].SetCaptureOnPress(true);
-        sliders[i].SetPlayFeedbackSFX(false); // 拖动过程不发声（与旧实现一致）
-        ui.Add(settingsGroupId, &sliders[i]);
+        sliders[i] = std::make_shared<UIWidget>();
+        sliders[i]->SetCaptureOnPress(true);
+        sliders[i]->SetPlayFeedbackSFX(false); // 拖动过程不发声（与旧实现一致）
+        ui.Add(settingsGroupId, sliders[i]);
     }
 }
 
@@ -156,9 +157,9 @@ void SettingsScene::DrawImGuiLayout() {
     // 按下即定位（按下当帧也会收到一次 Drag），按住后跟随光标，松开结束
     for (int i = 0; i < 3; ++i) {
         const float trackY = row1TrackY + (float)i * rowPitch;
-        sliders[i].SetRect(UIRect::FromBounds(trackLeft - kVolThumbR, trackY - kVolThumbR - 8.f,
+        sliders[i]->SetRect(UIRect::FromBounds(trackLeft - kVolThumbR, trackY - kVolThumbR - 8.f,
                                               trackRight + kVolThumbR, trackY + kVolThumbR + 8.f));
-        sliders[i].SetOnDrag([this, i, trackLeft, trackW](const UIEvent& e) {
+        sliders[i]->SetOnDrag([this, i, trackLeft, trackW](const UIEvent& e) {
             const float t = std::clamp((e.pointer.x - trackLeft) / trackW, 0.f, 1.f);
             float& v = VolumeRef(i);
             if (t != v) {
@@ -185,9 +186,9 @@ void SettingsScene::DrawImGuiLayout() {
         const float trackY = row1TrackY + (float)i * rowPitch;
         const float value  = *values[i];
         const float thumbX = trackLeft + value * trackW;
-        const bool active  = sliders[i].IsCaptured();
+        const bool active  = sliders[i]->IsCaptured();
         // 悬停/拖拽中高亮整行滑轨（命中区为整条滑轨，滑块与轨道一致亮起）
-        const bool trackHot = active || sliders[i].IsHovered();
+        const bool trackHot = active || sliders[i]->IsHovered();
         const bool thumbHot = trackHot;
 
         // 行间分隔线（暗金，与榜单行分隔同款）

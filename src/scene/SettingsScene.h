@@ -29,7 +29,8 @@ private:
 
     // ===== UI 交互控件（拖动归属由 UISystem 维护） =====
     int settingsGroupId = -1; // 设置页控件组：返回按钮 + 三条音量滑条
-    UIWidget sliders[3];      // 全局/背景音乐/音效滑条（按下即捕获）
+    std::shared_ptr<UIWidget> sliders[3];
+                            // 全局/背景音乐/音效滑条（按下即捕获；构造函数中逐个创建后登记）
 
     void SyncFromAudioSystem();
     void DrawImGuiLayout();

@@ -175,7 +175,7 @@ void MainSceneOverLayer::InitSprites() {
     restartButton->SetOnClick([this](){
         if (onRestart) onRestart();
     });
-    ui.Add(overGroupId, restartButton.get());
+    ui.Add(overGroupId, restartButton);
 
     backToReadyButton = std::make_shared<ButtonSprite>(
         ButtonSprite::Style::Secondary,
@@ -185,7 +185,7 @@ void MainSceneOverLayer::InitSprites() {
     backToReadyButton->SetOnClick([](){
         SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
     });
-    ui.Add(overGroupId, backToReadyButton.get());
+    ui.Add(overGroupId, backToReadyButton);
 }
 
 void MainSceneOverLayer::DrawImGUILayout() {

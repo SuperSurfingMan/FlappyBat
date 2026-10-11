@@ -1,6 +1,7 @@
 #pragma once
 #include "Scene.h"
 #include <algorithm>
+#include <memory>
 #include <vector>
 #include <string>
 #include <array>
@@ -111,7 +112,8 @@ private:
     // ===== 局内 HUD 交互控件 =====
     // 能量图标热区：仅充满时可命中（释放护盾）；未满时不启用，
     // 点击自然透传给振翅。命中判定与事件派发均由 UISystem 完成。
-    UIWidget energyIcon;
+    // 热区控件统一用 shared_ptr 登记（所有权由本场景与 UISystem 共享，不再传址）
+    std::shared_ptr<UIWidget> energyIcon = std::make_shared<UIWidget>();
     int hudGroupId = -1;
 
     void UpdateBackground(float dt);

@@ -242,38 +242,40 @@ void ReadyScene::InitButtons() {
             Application::Get().GetScene(Application::Scenes::AchievementsScene));
     });
 
-    // ===== 菜单按钮登记到 UISystem =====
-    for (auto& btn : menuButtons) ui.Add(menuGroupId, btn.get());
-    ui.Add(menuGroupId, achievementEntry.get());
+    // ===== 菜单按钮登记到 UISystem（传 shared_ptr，登记即共享持有） =====
+    for (auto& btn : menuButtons) ui.Add(menuGroupId, btn);
+    ui.Add(menuGroupId, achievementEntry);
 
     // ===== 分裂行热区：维持展开的整行横向范围（只取悬停事实，不绘制不发声） =====
     const float rowW = ModeSubBtnW * 3.0f + ModeSubBtnGap * 2.0f;
-    startRowZone.SetRect(UIRect::FromCenter(cx, StartBtnY,
+    startRowZone->SetRect(UIRect::FromCenter(cx, StartBtnY,
                                             rowW + kRowZonePadX * 2.0f,
                                             UITheme::MainBtnH + kRowZonePadY * 2.0f));
-    startRowZone.SetPlayFeedbackSFX(false);
-    ui.Add(menuGroupId, &startRowZone);
+    startRowZone->SetPlayFeedbackSFX(false);
+    ui.Add(menuGroupId, startRowZone);
 
     // ===== 三个模式按钮热区：分裂完成后最终几何即此矩形（DrawStartButtonRow 同一组常量） =====
     for (int i = 0; i < 3; ++i) {
+        modeZones[i] = std::make_shared<UIWidget>();
         const float bx = cx + (float)(i - 1) * (ModeSubBtnW + ModeSubBtnGap);
-        modeZones[i].SetRect(UIRect::FromCenter(bx, StartBtnY, ModeSubBtnW, UITheme::MainBtnH));
-        modeZones[i].SetOnClick([this, i]() { StartGameWithMode(i); });
-        ui.Add(menuGroupId, &modeZones[i]);
+        modeZones[i]->SetRect(UIRect::FromCenter(bx, StartBtnY, ModeSubBtnW, UITheme::MainBtnH));
+        modeZones[i]->SetOnClick([this, i]() { StartGameWithMode(i); });
+        ui.Add(menuGroupId, modeZones[i]);
     }
 
     // ===== 护盾升级：右上角金币入口（属主菜单组） =====
-    coinEntry.SetOnClick([this]() {
+    coinEntry->SetOnClick([this]() {
         upgradePanelOpen = true;
         insufficientMsgTimer = 0.0f;
         std::cout << "Upgrade panel opened." << std::endl;
     });
-    ui.Add(menuGroupId, &coinEntry);
+    ui.Add(menuGroupId, coinEntry);
 
     // ===== 升级面板内控件（模态组）：矩形在绘制函数里与底板共用同一份几何逐帧同步 =====
     for (int t = 0; t < PlayerProfile::TrackCount; ++t) {
-        buyZones[t].SetPlayFeedbackSFX(false); // 购买结果自带音效（成功=奖励音）
-        buyZones[t].SetOnClick([this, t]() {
+        buyZones[t] = std::make_shared<UIWidget>();
+        buyZones[t]->SetPlayFeedbackSFX(false); // 购买结果自带音效（成功=奖励音）
+        buyZones[t]->SetOnClick([this, t]() {
             auto& profile = PlayerProfile::Get();
             if (profile.GetLevel(t) >= PlayerProfile::MaxLevel) return; // 已满级：不响应
             if (profile.TryBuy(t)) {
@@ -284,12 +286,12 @@ void ReadyScene::InitButtons() {
                 insufficientMsgTimer = 1.5f;
             }
         });
-        ui.Add(upgradeGroupId, &buyZones[t]);
+        ui.Add(upgradeGroupId, buyZones[t]);
     }
 
-    upgradeBackZone.SetPlayFeedbackSFX(false);
-    upgradeBackZone.SetOnClick([this]() { upgradePanelOpen = false; });
-    ui.Add(upgradeGroupId, &upgradeBackZone);
+    upgradeBackZone->SetPlayFeedbackSFX(false);
+    upgradeBackZone->SetOnClick([this]() { upgradePanelOpen = false; });
+    ui.Add(upgradeGroupId, upgradeBackZone);
 }
 
 void ReadyScene::LoadSpritesFromResourceManager() {
@@ -401,9 +403,9 @@ void ReadyScene::UpdateModeSplit(float dt) {
 
     // 热区可交互性：分裂行区域只在已有分裂进度时接管（合并态让位给"开始游戏"本体，
     // 保持"必须先悬停本体才分裂"的门槛）；模式按钮只在完全分裂后参与
-    startRowZone.SetEnabled(!upgradePanelOpen && modeSplitProgress > 0.001f);
+    startRowZone->SetEnabled(!upgradePanelOpen && modeSplitProgress > 0.001f);
     for (int i = 0; i < 3; ++i)
-        modeZones[i].SetEnabled(!upgradePanelOpen && modeSplitProgress >= 0.999f);
+        modeZones[i]->SetEnabled(!upgradePanelOpen && modeSplitProgress >= 0.999f);
 
     // 升级面板为模态覆盖层：强制收起并跳过交互
     if (upgradePanelOpen) {
@@ -417,7 +419,7 @@ void ReadyScene::UpdateModeSplit(float dt) {
         // ===== 悬停事实全部来自控件：本帧唯一被 UISystem 判为悬停的控件才是激活者 =====
         int hoverIdx = -1;
         for (int i = 0; i < 3; ++i) {
-            if (modeZones[i].IsHovered()) { hoverIdx = i; break; }
+            if (modeZones[i]->IsHovered()) { hoverIdx = i; break; }
         }
 
         // 持续分裂判定区 = 整行热区 / 任意模式按钮 / 开始按钮本体。
@@ -425,7 +427,7 @@ void ReadyScene::UpdateModeSplit(float dt) {
         //（SetEnabled 在 Update 中生效，而命中判定已在本帧更早的 Dispatch 完成），
         // 交接当帧两者可能同时为空，若只看热区会把刚触发的分裂立即误判为“离开”而收缩。
         const bool mainHot = !menuButtons.empty() && menuButtons[0]->IsHovered();
-        const bool rowHot  = startRowZone.IsHovered() || hoverIdx >= 0 || mainHot;
+        const bool rowHot  = startRowZone->IsHovered() || hoverIdx >= 0 || mainHot;
 
         // 悬停计时：未分裂时需悬停在"开始游戏"按钮本体上；分裂后整个横向区域均可维持
         if (splitOpen ? rowHot : mainHot) {
@@ -610,8 +612,8 @@ void ReadyScene::DrawUpgradeEntryButton() {
     const float cy = 52.0f; // 与奖杯图标垂直居中对齐（贴屏幕顶部）
 
     // 命中矩形与底板几何同源；悬停高亮直读控件状态（由 UISystem 维护）
-    coinEntry.SetRect(UIRect::FromCenter(cx, cy, w, h));
-    const bool hovered = coinEntry.IsHovered();
+    coinEntry->SetRect(UIRect::FromCenter(cx, cy, w, h));
+    const bool hovered = coinEntry->IsHovered();
 
     UIBuilder::DrawRoundedRect(cx, cy, w, h, h * 0.5f,
         UITheme::ToImU32({0.07f, 0.05f, 0.13f}, 0.85f),
@@ -759,9 +761,9 @@ void ReadyScene::DrawUpgradePanelUI() {
         // 购买按钮：可买（主按钮高亮）/ 买不起（压暗）/ 满级（置灰）
         const float btnW = 240.0f, btnH = 52.0f;
         const float bx = cx, by = top + 140.0f;
-        buyZones[t].SetRect(UIRect::FromCenter(bx, by, btnW, btnH)); // 热区与底板同源
+        buyZones[t]->SetRect(UIRect::FromCenter(bx, by, btnW, btnH)); // 热区与底板同源
         const bool affordable = !maxed && profile.GetCoins() >= cost;
-        const bool btnHover = affordable && buyZones[t].IsHovered();
+        const bool btnHover = affordable && buyZones[t]->IsHovered();
         const std::string buyText = maxed ? "已满级"
                                     : "升级 · " + std::to_string(cost) + " 金币";
 
@@ -792,8 +794,8 @@ void ReadyScene::DrawUpgradePanelUI() {
 
     // 返回按钮（关闭面板回到主菜单）
     const float backY = 672.0f;
-    upgradeBackZone.SetRect(UIRect::FromCenter(cx, backY, 200.0f, 60.0f)); // 热区与底板同源
-    const bool backHovered = upgradeBackZone.IsHovered();
+    upgradeBackZone->SetRect(UIRect::FromCenter(cx, backY, 200.0f, 60.0f)); // 热区与底板同源
+    const bool backHovered = upgradeBackZone->IsHovered();
     UIBuilder::DrawButton(cx, backY, 200.0f, 60.0f, false, backHovered, false);
     UIBuilder::DrawButtonText("返回", cx, backY, 24.0f, backHovered, false);
 }

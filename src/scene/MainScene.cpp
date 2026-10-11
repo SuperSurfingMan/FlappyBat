@@ -93,9 +93,9 @@ MainScene::MainScene()
     // 命中矩形与绘制几何同源（GetEnergyIconRect）；可点与否由 SetEnabled 逐帧同步，
     // 鼠标判定不再出现在本场景代码里
     hudGroupId = UISystem::Get().CreateGroup(kLayerMainHud);
-    energyIcon.SetPlayFeedbackSFX(false); // 原实现无音效，保持听感不变
-    energyIcon.SetOnClick([this]() { TryReleaseShield(); });
-    UISystem::Get().Add(hudGroupId, &energyIcon);
+    energyIcon->SetPlayFeedbackSFX(false); // 原实现无音效，保持听感不变
+    energyIcon->SetOnClick([this]() { TryReleaseShield(); });
+    UISystem::Get().Add(hudGroupId, energyIcon);
 
     // 玩法操控的按键集：声明给 UISystem，本场景只读它推送的回帧快照
     UISystem::Get().WatchKeys({GLFW_KEY_SPACE, GLFW_KEY_W, GLFW_KEY_UP,
@@ -1183,11 +1183,11 @@ void MainScene::DrawEnergyHUD() {
 
     // ===== 图标（闪电） =====
     // 命中区与绘制共用同一份几何；仅能量充满时启用，未充满时点击自然透传给振翅
-    energyIcon.SetRect(UIRect::FromCenter(iconCx, rowY, iconSize, iconSize));
-    energyIcon.SetEnabled(isFull);
-    const bool iconHovered = energyIcon.IsHovered();
+    energyIcon->SetRect(UIRect::FromCenter(iconCx, rowY, iconSize, iconSize));
+    energyIcon->SetEnabled(isFull);
+    const bool iconHovered = energyIcon->IsHovered();
 
-    UIBuilder::DrawIconBackground(iconCx, rowY, iconSize, iconHovered, energyIcon.IsPressed());
+    UIBuilder::DrawIconBackground(iconCx, rowY, iconSize, iconHovered, energyIcon->IsPressed());
     {
         // 闪电符号：上下两个三角形拼成
         ImU32 boltCol = isActive ? UITheme::ToImU32(UITheme::Moonlight)

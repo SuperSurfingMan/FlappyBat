@@ -7,19 +7,12 @@
 #include <algorithm>
 
 // =============================================================================
-// UISystem：每帧一次命中判定 + 事件派发（详见 UISystem.h 的职责边界说明）
+// UISystem：每帧一次命中判定 + 事件派发（详见 UISystem.h 的职责边界与所有权说明）
 // =============================================================================
 
-namespace UIInternal {
-    // 控件自注销：UIWidget 析构时调用（实现在此以便 UIWidget.h 不依赖 UISystem.h）
-    void UnregisterWidget(UIWidget* w) {
-        UISystem::Get().Remove(w);
-    }
-}
-
 UISystem& UISystem::Get() {
-    // 泄漏式单例：场景/图层持有的控件析构时会回调 Remove，
-    // 若本实例在静态析构阶段先被销毁，自注销将访问已失效对象（项目历史段错误根因）。
+    // 泄漏式单例：登记表以 shared_ptr 共享持有控件，且场景/图层析构会回调用本系统注销 sink，
+    // 若本实例在静态析构阶段先被销毁，这些回调将访问已失效对象（项目历史段错误根因）。
     static UISystem* instance = new UISystem();
     return *instance;
 }
@@ -69,39 +62,45 @@ void UISystem::PopModal(UIGroupId id) {
 
 // ===== 控件注册 =====
 
-void UISystem::Add(UIGroupId groupId, UIWidget* widget) {
+void UISystem::Add(UIGroupId groupId, const std::shared_ptr<UIWidget>& widget) {
     Group* g = FindGroup(groupId);
     if (!g || !widget) return;
-    if (std::find(g->widgets.begin(), g->widgets.end(), widget) != g->widgets.end()) return;
+    const UIWidget* raw = widget.get();
+    for (const std::shared_ptr<UIWidget>& w : g->widgets) {
+        if (w.get() == raw) return;  // 同一控件不重复登记
+    }
     g->widgets.push_back(widget);
 }
 
-void UISystem::Remove(UIWidget* widget) {
+void UISystem::Remove(const std::shared_ptr<UIWidget>& widget) {
     if (!widget) return;
+    const UIWidget* raw = widget.get();
     for (Group& g : groups) {
-        g.widgets.erase(std::remove(g.widgets.begin(), g.widgets.end(), widget), g.widgets.end());
+        g.widgets.erase(std::remove_if(g.widgets.begin(), g.widgets.end(),
+            [raw](const std::shared_ptr<UIWidget>& w) { return w.get() == raw; }),
+            g.widgets.end());
     }
-    // 控件正在销毁：只摘引用，不发事件
-    if (hovered == widget) hovered = nullptr;
-    if (pressed == widget) {
+    // 登记表已摘掉引用：与本控件相关的交互归属一并清零，避免残留指针指向即将析构的对象
+    if (hovered == raw) hovered = nullptr;
+    if (pressed == raw) {
         pressed = nullptr;
         heldMask &= ~(1u << GLFW_MOUSE_BUTTON_LEFT);
     }
-    if (captured == widget) captured = nullptr;
+    if (captured == raw) captured = nullptr;
 }
 
 void UISystem::ClearWidgetState(UIGroupId id) {
     Group* g = FindGroup(id);
     if (!g) return;
-    for (UIWidget* w : g->widgets) {
-        if (hovered == w) hovered = nullptr;
-        if (pressed == w) {
+    for (const std::shared_ptr<UIWidget>& w : g->widgets) {
+        if (hovered == w.get()) hovered = nullptr;
+        if (pressed == w.get()) {
             pressed = nullptr;
             heldMask &= ~(1u << GLFW_MOUSE_BUTTON_LEFT);
         }
-        if (captured == w) captured = nullptr;
+        if (captured == w.get()) captured = nullptr;
         w->SetCapturedFlag(false);
-        Deliver(w, UIEventType::Cancel);
+        Deliver(w.get(), UIEventType::Cancel);
     }
 }
 
@@ -197,10 +196,12 @@ const UISystem::Group* UISystem::FindGroup(UIGroupId id) const {
 }
 
 UISystem::UIGroupId UISystem::GroupOf(const UIWidget* w) const {
+    if (!w) return kInvalidGroup;
     for (size_t i = 0; i < groups.size(); ++i) {
-        const std::vector<UIWidget*>& vs = groups[i].widgets;
-        if (std::find(vs.begin(), vs.end(), const_cast<UIWidget*>(w)) != vs.end())
-            return (UIGroupId)i;
+        const std::vector<std::shared_ptr<UIWidget>>& vs = groups[i].widgets;
+        for (const std::shared_ptr<UIWidget>& sp : vs) {
+            if (sp.get() == w) return (UIGroupId)i;
+        }
     }
     return kInvalidGroup;
 }
@@ -230,16 +231,21 @@ void UISystem::CancelStaleTargets() {
 }
 
 UIWidget* UISystem::PickHit(float px, float py) const {
-    // 模态优先：栈顶组有效时，命中解析只在该组内进行（下层组完全让位）
+    // 模态优先：模态栈非空即整帧走"只在栈顶组内解析"的短路，下层组完全让位。
+    // 判据与 IsWidgetLive 严格一致——只看"谁在栈顶"，不再回看栈顶组的 enabled：
+    // 若栈顶组未启用便回落到常规遍历，命中的下层控件会在下一帧被 CancelStaleTargets
+    // 判为失活并 Cancel，于是每帧 Enter/Leave 反复交接、悬停音效连发。
+    // 由此约定：PushModal/PopModal 必须与 SetGroupEnabled 同帧成对（见 UISystem.h）。
     if (!modalStack.empty()) {
         const Group* top = FindGroup(modalStack.back());
         if (top && top->enabled) {
+            // 反向遍历：组内靠后的登记者在上，优先命中
             for (auto it = top->widgets.rbegin(); it != top->widgets.rend(); ++it) {
-                UIWidget* w = *it;
-                if (w->IsEnabled() && w->GetHitRect().Contains(px, py)) return w;
+                if ((*it)->IsEnabled() && (*it)->GetHitRect().Contains(px, py)) return it->get();
             }
-            return nullptr;
         }
+        // 栈顶组无命中（含组未启用、组已被销毁两类异常态）：本帧无任何控件认领鼠标
+        return nullptr;
     }
 
     // 常规：组按 (layer, 创建序) 降序，组内按注册序降序（后注册者在上）
@@ -247,8 +253,7 @@ UIWidget* UISystem::PickHit(float px, float py) const {
         const Group& g = groups[gid];
         if (!g.enabled) continue;
         for (auto it = g.widgets.rbegin(); it != g.widgets.rend(); ++it) {
-            UIWidget* w = *it;
-            if (w->IsEnabled() && w->GetHitRect().Contains(px, py)) return w;
+            if ((*it)->IsEnabled() && (*it)->GetHitRect().Contains(px, py)) return it->get();
         }
     }
     return nullptr;

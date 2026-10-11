@@ -153,7 +153,7 @@ void MainSceneUILayer::InitAllButtons() {
     pauseButton = std::make_shared<ButtonSprite>(
         UIBuilder::IconKind::Pause, Vec2{cx, cy}, iconSize);
     pauseButton->SetOnClick([this](){ isPausing = true; });
-    ui.Add(hudGroupId, pauseButton.get());
+    ui.Add(hudGroupId, pauseButton);
 
     cx -= iconSize + iconSpacing;
     homeButton = std::make_shared<ButtonSprite>(
@@ -161,7 +161,7 @@ void MainSceneUILayer::InitAllButtons() {
     homeButton->SetOnClick([](){
         SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
     });
-    ui.Add(hudGroupId, homeButton.get());
+    ui.Add(hudGroupId, homeButton);
 
     cx -= iconSize + iconSpacing;
     quitButton = std::make_shared<ButtonSprite>(
@@ -169,7 +169,7 @@ void MainSceneUILayer::InitAllButtons() {
     quitButton->SetOnClick([](){
         Application::Get().RequestQuit();
     });
-    ui.Add(hudGroupId, quitButton.get());
+    ui.Add(hudGroupId, quitButton);
 
     // ===== 暂停面板按钮（纵向，面板下半部） =====
     const float btnY0 = WIN_HEIGHT * 0.5f + 60.f;   // 继续按钮
@@ -181,7 +181,7 @@ void MainSceneUILayer::InitAllButtons() {
         Vec2{UITheme::MainBtnW, UITheme::MainBtnH},
         "继续游戏");
     resumeButton->SetOnClick([this](){ isPausing = false; });
-    ui.Add(pauseGroupId, resumeButton.get());
+    ui.Add(pauseGroupId, resumeButton);
 
     restartButton = std::make_shared<ButtonSprite>(
         ButtonSprite::Style::Secondary,
@@ -192,7 +192,7 @@ void MainSceneUILayer::InitAllButtons() {
         isPausing = false;
         if (onRestartCallback) onRestartCallback();
     });
-    ui.Add(pauseGroupId, restartButton.get());
+    ui.Add(pauseGroupId, restartButton);
 
     homeButtonInPanel = std::make_shared<ButtonSprite>(
         ButtonSprite::Style::Secondary,
@@ -202,7 +202,7 @@ void MainSceneUILayer::InitAllButtons() {
     homeButtonInPanel->SetOnClick([](){
         SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
     });
-    ui.Add(pauseGroupId, homeButtonInPanel.get());
+    ui.Add(pauseGroupId, homeButtonInPanel);
 }
 
 void MainSceneUILayer::Reset() {

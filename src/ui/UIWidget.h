@@ -11,13 +11,8 @@
 #include <functional>
 #include "../Math.h"
 
-// 自注销通道：实现在 UISystem.cpp。
-// 单独抽出是为了让 UIWidget.h 不反向依赖 UISystem.h（避免循环包含），
-// 同时保证控件析构时一定能从系统里摘掉自己——静态析构顺序下不会留下悬垂注册。
-class UIWidget;
-namespace UIInternal {
-    void UnregisterWidget(UIWidget* w);
-}
+// 所有权约定：控件由 UISystem 与持有方（场景 / 图层）共同以 std::shared_ptr 持有（登记即共享），
+// “已登记的控件先于登记表析构”不可能发生，因此本类不再需要析构自注销通道。
 
 // ===== 命中矩形（左上角 + 尺寸） =====
 struct UIRect {
@@ -75,7 +70,7 @@ public:
     using Handler = std::function<void(const UIEvent&)>;
 
     UIWidget() = default;
-    virtual ~UIWidget() { UIInternal::UnregisterWidget(this); }
+    virtual ~UIWidget() = default;
 
     UIWidget(const UIWidget&) = delete;
     UIWidget& operator=(const UIWidget&) = delete;

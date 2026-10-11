@@ -46,17 +46,17 @@ AchievementsScene::AchievementsScene() {
     // 注册顺序决定层叠：滚轮区（最大面积）< 滑轨 < 滑块（优先被抓取）
     UISystem& ui = UISystem::Get();
     achGroupId = ui.CreateGroup(20); // 与其它场景主控件同层
-    ui.Add(achGroupId, backToReady.get());
+    ui.Add(achGroupId, backToReady);
 
-    listZone.SetPlayFeedbackSFX(false);
-    ui.Add(achGroupId, &listZone);
+    listZone->SetPlayFeedbackSFX(false);
+    ui.Add(achGroupId, listZone);
 
-    scrollTrack.SetPlayFeedbackSFX(false);
-    ui.Add(achGroupId, &scrollTrack);
+    scrollTrack->SetPlayFeedbackSFX(false);
+    ui.Add(achGroupId, scrollTrack);
 
-    scrollThumb.SetPlayFeedbackSFX(false);
-    scrollThumb.SetCaptureOnPress(true);
-    ui.Add(achGroupId, &scrollThumb);
+    scrollThumb->SetPlayFeedbackSFX(false);
+    scrollThumb->SetCaptureOnPress(true);
+    ui.Add(achGroupId, scrollThumb);
 }
 
 AchievementsScene::~AchievementsScene() {}
@@ -136,32 +136,32 @@ void AchievementsScene::DrawAchievements() {
 
     // 滑块顶部（拖拽/翻页/绘制共用）；不可滚动时退化为轨道顶，避免除零
     const float thumbTop = scrollable ? trackTop + (achScroll / maxScroll) * thumbRange : trackTop;
-    const bool  dragging = scrollThumb.IsCaptured();
+    const bool  dragging = scrollThumb->IsCaptured();
 
     // ===== 滚动交互登记：热区几何与绘制同源，命中判定与派发归 UISystem =====
     // 悬停面板任意位置即可滚轮滚动（一步约两行）
-    listZone.SetRect(UIRect::FromBounds(panelLeft, panelTop, panelRight, panelBottom));
-    listZone.SetEnabled(scrollable);
-    listZone.SetOnWheel([this, rowH](const UIEvent& e) {
+    listZone->SetRect(UIRect::FromBounds(panelLeft, panelTop, panelRight, panelBottom));
+    listZone->SetEnabled(scrollable);
+    listZone->SetOnWheel([this, rowH](const UIEvent& e) {
         achScrollTarget -= e.wheel * rowH * 2.f;
     });
 
     // 滑轨空白区：点击向点击方向翻一页
-    scrollTrack.SetRect(UIRect::FromBounds(trackX - 11.f, trackTop,
+    scrollTrack->SetRect(UIRect::FromBounds(trackX - 11.f, trackTop,
                                            trackX + 11.f, trackTop + trackH));
-    scrollTrack.SetEnabled(scrollable);
-    scrollTrack.SetOnClick([this, thumbTop, viewH]() {
+    scrollTrack->SetEnabled(scrollable);
+    scrollTrack->SetOnClick([this, thumbTop, viewH]() {
         achScrollTarget += (UISystem::Get().GetPointer().y < thumbTop) ? -viewH : viewH;
     });
 
     // 滑块：命中区略大于绘制宽度便于抓取；按下即捕获，拖拽直接定位（不做平滑）
-    scrollThumb.SetRect(UIRect::FromBounds(trackX - 9.f, thumbTop - 5.f,
+    scrollThumb->SetRect(UIRect::FromBounds(trackX - 9.f, thumbTop - 5.f,
                                            trackX + 9.f, thumbTop + thumbH + 5.f));
-    scrollThumb.SetEnabled(scrollable);
-    scrollThumb.SetOnPress([this, thumbTop](const UIEvent& e) {
+    scrollThumb->SetEnabled(scrollable);
+    scrollThumb->SetOnPress([this, thumbTop](const UIEvent& e) {
         achScrollbarGrabOffset = e.downPointer.y - thumbTop;
     });
-    scrollThumb.SetOnDrag([this, trackTop, thumbRange, maxScroll](const UIEvent& e) {
+    scrollThumb->SetOnDrag([this, trackTop, thumbRange, maxScroll](const UIEvent& e) {
         const float newTop = e.pointer.y - achScrollbarGrabOffset;
         achScroll = achScrollTarget = (newTop - trackTop) / thumbRange * maxScroll;
     });
@@ -243,7 +243,7 @@ void AchievementsScene::DrawAchievements() {
 
     // ===== 右侧滑块（金色，hover 提亮、拖拽最亮） =====
     const float curTop = thumbTop;
-    const bool thumbHot = dragging || scrollThumb.IsHovered();
+    const bool thumbHot = dragging || scrollThumb->IsHovered();
 
     dl->AddRectFilled(ImVec2(trackX - 3.f, trackTop), ImVec2(trackX + 3.f, trackTop + trackH),
                       UITheme::ToImU32(UITheme::AmberDim, 0.30f), 3.0f);

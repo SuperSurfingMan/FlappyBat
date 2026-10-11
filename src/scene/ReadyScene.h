@@ -75,11 +75,18 @@ private:
     // ===== UI 交互控件（区域判定与事件派发均属 UISystem） =====
     int menuGroupId = -1;     // 主菜单：菜单按钮 + 奖杯入口 + 分裂行/模式按钮
     int upgradeGroupId = -1;  // 护盾升级面板（模态：弹开期间主菜单整体让位）
-    UIWidget startRowZone;    // 分裂后维持展开的整行区域（无自身绘制）
-    UIWidget modeZones[3];    // 三个模式按钮热区
-    UIWidget coinEntry;       // 右上角金币入口（打开升级面板）
-    UIWidget buyZones[2];     // 两条升级轨道的购买热区（个数与 PlayerProfile::TrackCount 一致）
-    UIWidget upgradeBackZone; // 升级面板“返回”热区
+    // 热区控件以 shared_ptr 登记（所有权与本场景和 UISystem 共享）：
+    // 标量在声明处创建，数组在 InitButtons 的现有循环里逐个创建后登记。
+    std::shared_ptr<UIWidget> startRowZone = std::make_shared<UIWidget>();
+                                        // 分裂后维持展开的整行区域（无自身绘制）
+    std::shared_ptr<UIWidget> modeZones[3];
+                                        // 三个模式按钮热区（InitButtons 中创建）
+    std::shared_ptr<UIWidget> coinEntry = std::make_shared<UIWidget>();
+                                        // 右上角金币入口（打开升级面板）
+    std::shared_ptr<UIWidget> buyZones[2];
+                                        // 两条升级轨道的购买热区（个数与 PlayerProfile::TrackCount 一致，InitButtons 中创建）
+    std::shared_ptr<UIWidget> upgradeBackZone = std::make_shared<UIWidget>();
+                                        // 升级面板“返回”热区
 
     void UpdateModeSplit(float dt);   // 悬停计时与分裂进度推进（悬停事实读自控件，不再自行判定）
     void DrawStartButtonRow();        // 分裂/收缩动效绘制（合并态由 ButtonSprite 绘制）

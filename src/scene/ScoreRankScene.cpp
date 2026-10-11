@@ -65,7 +65,7 @@ ScoreRankScene::ScoreRankScene() {
     backToReady->SetOnClick([](){
         SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
     });
-    ui.Add(rankGroupId, backToReady.get());
+    ui.Add(rankGroupId, backToReady);
 
     clearRecords = std::make_shared<ButtonSprite>(
         ButtonSprite::Style::Danger,
@@ -82,7 +82,7 @@ ScoreRankScene::ScoreRankScene() {
         }
         OpenClearConfirm();
     });
-    ui.Add(rankGroupId, clearRecords.get());
+    ui.Add(rankGroupId, clearRecords);
 
     // 右上角小图标：重新加载（ImGui 坐标 y 向下）
     syncAndLoad = std::make_shared<ButtonSprite>(
@@ -96,7 +96,7 @@ ScoreRankScene::ScoreRankScene() {
         toast_cast->SetColor(Vec3{0.4f, 0.85f, 0.4f});
         toast_cast->Activate();
     });
-    ui.Add(rankGroupId, syncAndLoad.get());
+    ui.Add(rankGroupId, syncAndLoad);
 
     // Toast（顶部居中）
     Vec2 toastPosition = {WIN_WIDTH * 0.5f, 60.f};
@@ -134,36 +134,37 @@ ScoreRankScene::ScoreRankScene() {
 
     // ===== 内联热区控件登记（矩形与几何在绘制函数中与绘制同源同步） =====
     // 注册顺序决定层叠：先滚轮区（最大面积、最下层），再滑轨，最后滑块（优先被抓取）
-    listZone.SetPlayFeedbackSFX(false);      // 纯滚轮热区：不发悬停/点击声
-    ui.Add(rankGroupId, &listZone);
+    listZone->SetPlayFeedbackSFX(false);     // 纯滚轮热区：不发悬停/点击声
+    ui.Add(rankGroupId, listZone);
 
-    scrollTrack.SetPlayFeedbackSFX(false);
-    ui.Add(rankGroupId, &scrollTrack);
+    scrollTrack->SetPlayFeedbackSFX(false);
+    ui.Add(rankGroupId, scrollTrack);
 
-    scrollThumb.SetPlayFeedbackSFX(false);
-    scrollThumb.SetCaptureOnPress(true);     // 按下即捕获：拖拽移出滑轨仍连续跟随
-    ui.Add(rankGroupId, &scrollThumb);
+    scrollThumb->SetPlayFeedbackSFX(false);
+    scrollThumb->SetCaptureOnPress(true);    // 按下即捕获：拖拽移出滑轨仍连续跟随
+    ui.Add(rankGroupId, scrollThumb);
 
     for (int i = 0; i < (int)ScoreRank::ModeCount; ++i) {
-        tabs[i].SetOnClick([this, i]() { SwitchViewMode((ScoreRank::RankMode)i); });
-        ui.Add(rankGroupId, &tabs[i]);       // 页签最后注册：盖在滚轮区之上
+        tabs[i] = std::make_shared<UIWidget>();
+        tabs[i]->SetOnClick([this, i]() { SwitchViewMode((ScoreRank::RankMode)i); });
+        ui.Add(rankGroupId, tabs[i]);        // 页签最后注册：盖在滚轮区之上
     }
 
     // 弹窗层叠（后注册者在上）：遮罩 > 面板本体（吞掉面板内空白点击）> 取消/确认按钮
-    scrimZone.SetPlayFeedbackSFX(false);
-    scrimZone.SetOnClick([this]() { CloseClearConfirm(); });
-    ui.Add(dialogGroupId, &scrimZone);
+    scrimZone->SetPlayFeedbackSFX(false);
+    scrimZone->SetOnClick([this]() { CloseClearConfirm(); });
+    ui.Add(dialogGroupId, scrimZone);
 
-    dialogBody.SetPlayFeedbackSFX(false);
-    ui.Add(dialogGroupId, &dialogBody);
+    dialogBody->SetPlayFeedbackSFX(false);
+    ui.Add(dialogGroupId, dialogBody);
 
-    ui.Add(dialogGroupId, confirmNo.get());
-    ui.Add(dialogGroupId, confirmYes.get());
+    ui.Add(dialogGroupId, confirmNo);
+    ui.Add(dialogGroupId, confirmYes);
 
     confirmNo->SetShown(false);
     confirmYes->SetShown(false);
-    scrimZone.SetEnabled(false);
-    tabs[0].SetEnabled(false); // 选中页签不可点，后续由 DrawModeTabs 逐帧刷新
+    scrimZone->SetEnabled(false);
+    tabs[0]->SetEnabled(false); // 选中页签不可点，后续由 DrawModeTabs 逐帧刷新
 }
 
 ScoreRankScene::~ScoreRankScene() {}
@@ -267,9 +268,9 @@ void ScoreRankScene::DrawModeTabs(float panelX, float panelTop) {
         const bool selected = (i == (int)viewMode);
 
         // 热区与页签底板同源；选中项不可点（避免无效高亮与音效）
-        tabs[i].SetRect(UIRect::FromCenter(tx, rowY, kTabW, kTabH));
-        tabs[i].SetEnabled(!selected);
-        const bool hovered = tabs[i].IsHovered();
+        tabs[i]->SetRect(UIRect::FromCenter(tx, rowY, kTabW, kTabH));
+        tabs[i]->SetEnabled(!selected);
+        const bool hovered = tabs[i]->IsHovered();
 
         // 底板：选中 = 主按钮紫 + 亮金描边；未选中 = 面板同款暗色 + 暗金描边（悬停提亮）
         UIBuilder::DrawRoundedRect(tx, rowY, kTabW, kTabH, 12.f,
@@ -312,9 +313,9 @@ void ScoreRankScene::DrawImGuiRank() {
     DrawModeTabs(panelX, panelTop);
 
     if (scoreRank.empty()) {
-        listZone.SetEnabled(false);
-        scrollTrack.SetEnabled(false);
-        scrollThumb.SetEnabled(false);
+        listZone->SetEnabled(false);
+        scrollTrack->SetEnabled(false);
+        scrollThumb->SetEnabled(false);
         UIBuilder::DrawCenteredText("暂无记录，快去创造第一个纪录吧！",
                                     panelX, panelY, 24.0f,
                                     UITheme::ToImU32(UITheme::Moonlight));
@@ -346,32 +347,32 @@ void ScoreRankScene::DrawImGuiRank() {
 
     // 滑块顶部（拖拽/翻页/绘制共用）；不可滚动时退化为轨道顶，避免除零
     const float thumbTop = scrollable ? trackTop + (listScroll / maxScroll) * thumbRange : trackTop;
-    const bool  dragging = scrollThumb.IsCaptured();
+    const bool  dragging = scrollThumb->IsCaptured();
 
     // ===== 滚动交互登记：热区几何与绘制同源，命中判定与派发归 UISystem =====
     // 悬停面板任意位置即可滚轮滚动（一步约两行）
-    listZone.SetRect(UIRect::FromBounds(panelLeft, panelTop, panelRight, panelBottom));
-    listZone.SetEnabled(scrollable);
-    listZone.SetOnWheel([this, lineHeight](const UIEvent& e) {
+    listZone->SetRect(UIRect::FromBounds(panelLeft, panelTop, panelRight, panelBottom));
+    listZone->SetEnabled(scrollable);
+    listZone->SetOnWheel([this, lineHeight](const UIEvent& e) {
         listScrollTarget -= e.wheel * lineHeight * 2.f;
     });
 
     // 滑轨空白区：点击向点击方向翻一页
-    scrollTrack.SetRect(UIRect::FromBounds(trackX - 11.f, trackTop,
+    scrollTrack->SetRect(UIRect::FromBounds(trackX - 11.f, trackTop,
                                            trackX + 11.f, trackTop + trackH));
-    scrollTrack.SetEnabled(scrollable);
-    scrollTrack.SetOnClick([this, thumbTop, viewH]() {
+    scrollTrack->SetEnabled(scrollable);
+    scrollTrack->SetOnClick([this, thumbTop, viewH]() {
         listScrollTarget += (UISystem::Get().GetPointer().y < thumbTop) ? -viewH : viewH;
     });
 
     // 滑块：命中区略大于绘制宽度便于抓取；按下即捕获，拖拽直接定位（不做平滑）
-    scrollThumb.SetRect(UIRect::FromBounds(trackX - 9.f, thumbTop - 5.f,
+    scrollThumb->SetRect(UIRect::FromBounds(trackX - 9.f, thumbTop - 5.f,
                                            trackX + 9.f, thumbTop + thumbH + 5.f));
-    scrollThumb.SetEnabled(scrollable);
-    scrollThumb.SetOnPress([this, thumbTop](const UIEvent& e) {
+    scrollThumb->SetEnabled(scrollable);
+    scrollThumb->SetOnPress([this, thumbTop](const UIEvent& e) {
         scrollbarGrabOffset = e.downPointer.y - thumbTop;
     });
-    scrollThumb.SetOnDrag([this, trackTop, thumbRange, maxScroll](const UIEvent& e) {
+    scrollThumb->SetOnDrag([this, trackTop, thumbRange, maxScroll](const UIEvent& e) {
         const float newTop = e.pointer.y - scrollbarGrabOffset;
         listScroll = listScrollTarget = (newTop - trackTop) / thumbRange * maxScroll;
     });
@@ -447,7 +448,7 @@ void ScoreRankScene::DrawImGuiRank() {
 
     // ===== 右侧滑块：轨道 + 滑块（金色，hover 提亮、拖拽最亮） =====
     const float curTop = thumbTop;
-    const bool thumbHot = dragging || scrollThumb.IsHovered();
+    const bool thumbHot = dragging || scrollThumb->IsHovered();
 
     dl->AddRectFilled(ImVec2(trackX - 3.f, trackTop), ImVec2(trackX + 3.f, trackTop + trackH),
                       UITheme::ToImU32(UITheme::AmberDim, 0.30f), 3.0f);
@@ -488,8 +489,8 @@ void ScoreRankScene::OpenClearConfirm() {
     clearRecords->SetShown(false);
     confirmYes->SetShown(true);
     confirmNo->SetShown(true);
-    scrimZone.SetEnabled(true);
-    dialogBody.SetEnabled(true);
+    scrimZone->SetEnabled(true);
+    dialogBody->SetEnabled(true);
 
     UISystem& ui = UISystem::Get();
     ui.SetGroupEnabled(dialogGroupId, true);
@@ -501,8 +502,8 @@ void ScoreRankScene::CloseClearConfirm() {
     confirmFade = 0.f;
     confirmYes->SetShown(false);
     confirmNo->SetShown(false);
-    scrimZone.SetEnabled(false);
-    dialogBody.SetEnabled(false);
+    scrimZone->SetEnabled(false);
+    dialogBody->SetEnabled(false);
     backToReady->SetShown(true);
     syncAndLoad->SetShown(true);
     clearRecords->SetShown(true);
@@ -524,8 +525,8 @@ void ScoreRankScene::DrawClearConfirmDialog() {
     ImDrawList* dl = ImGui::GetForegroundDrawList();
 
     // 热区与遮罩/面板几何同源：遮罩整屏（点任意处取消），面板本体吞掉面板内空白点击
-    scrimZone.SetRect(UIRect{0.f, 0.f, WIN_WIDTH, WIN_HEIGHT});
-    dialogBody.SetRect(UIRect::FromCenter(cx, cy, dw, dh));
+    scrimZone->SetRect(UIRect{0.f, 0.f, WIN_WIDTH, WIN_HEIGHT});
+    dialogBody->SetRect(UIRect::FromCenter(cx, cy, dw, dh));
 
     // 全屏半透明遮罩：压暗并隔离背景 UI
     dl->AddRectFilled(ImVec2(0.f, 0.f), ImVec2(WIN_WIDTH, WIN_HEIGHT),
