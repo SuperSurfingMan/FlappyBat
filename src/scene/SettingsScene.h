@@ -1,6 +1,7 @@
 #pragma once
 #include "Scene.h"
 #include "../ui/UIWidget.h"   // 音量滑条热区控件需完整类型
+#include "../ui/InputScope.h" // 设置页控件组（非模态）
 #include <memory>
 
 class Sprite;
@@ -29,6 +30,7 @@ private:
 
     // ===== UI 交互控件（拖动归属由 UISystem 维护） =====
     int settingsGroupId = -1; // 设置页控件组：返回按钮 + 三条音量滑条
+    InputScope settingsScope;
     std::shared_ptr<UIWidget> sliders[3];
                             // 全局/背景音乐/音效滑条（按下即捕获；构造函数中逐个创建后登记）
 

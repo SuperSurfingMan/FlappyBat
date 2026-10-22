@@ -2,6 +2,7 @@
 #include "Scene.h"
 #include "../ui/UIWidget.h"   // 内联热区控件（分裂行/模式按钮/升级面板）需完整类型
 #include "../ui/GameInput.h"  // 作为 IGameInputSink 订阅推送式输入（ESC 关面板）
+#include "../ui/InputScope.h" // 主菜单组（非模态）+ 升级面板（模态）
 #include <vector>
 #include <memory>
 
@@ -75,6 +76,8 @@ private:
     // ===== UI 交互控件（区域判定与事件派发均属 UISystem） =====
     int menuGroupId = -1;     // 主菜单：菜单按钮 + 奖杯入口 + 分裂行/模式按钮
     int upgradeGroupId = -1;  // 护盾升级面板（模态：弹开期间主菜单整体让位）
+    InputScope menuScope;     // 主菜单组（非模态）
+    InputScope upgradeScope;  // 升级面板（模态）
     // 热区控件以 shared_ptr 登记（所有权与本场景和 UISystem 共享）：
     // 标量在声明处创建，数组在 InitButtons 的现有循环里逐个创建后登记。
     std::shared_ptr<UIWidget> startRowZone = std::make_shared<UIWidget>();

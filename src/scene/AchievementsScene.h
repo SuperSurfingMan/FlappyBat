@@ -1,6 +1,7 @@
 #pragma once
 #include "Scene.h"
 #include "../ui/UIWidget.h"   // 滚轮区/滚动条等内联热区控件需完整类型
+#include "../ui/InputScope.h" // 成就页控件组（非模态）
 #include <memory>
 
 class Sprite;
@@ -31,6 +32,7 @@ private:
 
     // ===== UI 交互控件（区域判定与事件派发均属 UISystem） =====
     int achGroupId = -1;    // 成就页控件组：返回按钮 + 滚轮区 + 滑轨 + 滑块
+    InputScope achScope;
     // 热区控件以 shared_ptr 登记（所有权与本场景和 UISystem 共享），在声明处创建
     std::shared_ptr<UIWidget> listZone = std::make_shared<UIWidget>();
                             // 列表面板：悬停于此接受滚轮滚动

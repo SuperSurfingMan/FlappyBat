@@ -42,6 +42,7 @@ SettingsScene::SettingsScene() {
     // UI 控件组：返回按钮与三条滑条均登记到 UISystem；滑条按下即捕获（拖出轨道仍跟随）
     UISystem& ui = UISystem::Get();
     settingsGroupId = ui.CreateGroup(20); // 与其它场景主控件同层
+    settingsScope.Bind(settingsGroupId, false);
     ui.Add(settingsGroupId, backToReady);
     for (int i = 0; i < 3; ++i) {
         sliders[i] = std::make_shared<UIWidget>();
@@ -73,12 +74,12 @@ SettingsScene::~SettingsScene() {}
 void SettingsScene::OnEnter() {
     // 进入时从音频系统读取当前音量到本地缓存（供滑块显示）
     SyncFromAudioSystem();
-    UISystem::Get().SetGroupEnabled(settingsGroupId, true);
+    settingsScope.SetEnabled(true);
 }
 
 void SettingsScene::OnExit() {
     // 离开本页：关闭控件组（拖动中的捕获会由 UISystem 自动 Cancel）
-    UISystem::Get().SetGroupEnabled(settingsGroupId, false);
+    settingsScope.SetEnabled(false);
 }
 
 void SettingsScene::Update(float dt) {

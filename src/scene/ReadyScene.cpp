@@ -41,21 +41,18 @@ ReadyScene::~ReadyScene() {
 
 void ReadyScene::OnEnter() {
     // 本场景控件组接管交互（转场期间由 Update 逐帧关闭）
-    UISystem& ui = UISystem::Get();
-    ui.SetGroupEnabled(menuGroupId, true);
-    ui.SetGroupEnabled(upgradeGroupId, upgradePanelOpen);
+    menuScope.SetEnabled(true);
+    upgradeScope.SetEnabled(upgradePanelOpen);
     // 订阅推送式输入（本场景只用 ESC 关闭升级面板）
-    ui.AddGameInputSink(this);
+    UISystem::Get().AddGameInputSink(this);
 }
 
 void ReadyScene::OnExit() {
     // 关闭本场景全部控件组：避免离开主菜单后残留热区继续抢点
-    UISystem& ui = UISystem::Get();
-    ui.SetGroupEnabled(menuGroupId, false);
-    ui.SetGroupEnabled(upgradeGroupId, false);
-    ui.PopModal(upgradeGroupId);
+    menuScope.SetEnabled(false);
+    upgradeScope.SetEnabled(false);
     // 停止输入推送
-    ui.RemoveGameInputSink(this);
+    UISystem::Get().RemoveGameInputSink(this);
 }
 
 void ReadyScene::Update(float dt) {
@@ -73,11 +70,8 @@ void ReadyScene::Update(float dt) {
 
     // ===== UI 交互闸门 =====
     // 转场进行中主菜单不可点；升级面板弹开时以模态独占命中
-    UISystem& ui = UISystem::Get();
-    ui.SetGroupEnabled(menuGroupId, !TransitionMask::Get().IsActive());
-    ui.SetGroupEnabled(upgradeGroupId, upgradePanelOpen);
-    if (upgradePanelOpen) ui.PushModal(upgradeGroupId);
-    else ui.PopModal(upgradeGroupId);
+    menuScope.SetEnabled(!TransitionMask::Get().IsActive());
+    upgradeScope.SetEnabled(upgradePanelOpen);
 
     // 金币不足提示倒计时（升级面板内点击买不起的轨道时触发）
     if (insufficientMsgTimer > 0.0f) {
@@ -177,6 +171,8 @@ void ReadyScene::InitButtons() {
     UISystem& ui = UISystem::Get();
     menuGroupId    = ui.CreateGroup(kLayerMenu);
     upgradeGroupId = ui.CreateGroup(kLayerUpgradePanel);
+    menuScope.Bind(menuGroupId, false);
+    upgradeScope.Bind(upgradeGroupId, true);
 
     // ===== 纵向布局（自上而下：开始 > 排行榜 > 设置 > 退出，ImGui 坐标 y 向下递增） =====
     const float gap = 22.f;

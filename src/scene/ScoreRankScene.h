@@ -2,13 +2,14 @@
 #include "Scene.h"
 #include "../app/ScoreRank.h"
 #include "../ui/UIWidget.h"   // 页签/滚动条/遮罩等内联热区控件需完整类型
+#include "../ui/InputScope.h"   // 主榜单组（非模态）+ 清空确认弹窗（模态）
 #include <string>
 #include <vector>
 #include <memory>
 
 class Sprite;
 class ButtonSprite;
-class Layer;
+class ToastLayer;
 
 class ScoreRankScene : public Scene {
 public:
@@ -31,7 +32,8 @@ private:
     std::shared_ptr<Sprite> titleSprite;
 
     std::vector<size_t> scoreRank;
-    std::shared_ptr<Layer> toastLayer;
+    // Toast 用具体类型持有：SetText/SetColor/Activate 无需向下转型
+    std::shared_ptr<ToastLayer> toastLayer;
 
     // ===== 模式切换（三模式独立榜单）：当前查看的模式页签 =====
     ScoreRank::RankMode viewMode = ScoreRank::RankMode::Classic;
@@ -49,6 +51,8 @@ private:
     // ===== UI 交互控件（区域判定与事件派发均属 UISystem） =====
     int rankGroupId = -1;   // 榜单主控件组：按钮 + 页签 + 滚轮区 + 滑轨 + 滑块
     int dialogGroupId = -1; // 清空确认弹窗（模态）
+    InputScope rankScope;   // 主榜单组（非模态）
+    InputScope dialogScope; // 清空确认弹窗（模态）
     // 热区控件以 shared_ptr 登记（所有权与本场景和 UISystem 共享）：
     // 标量在声明处创建，tabs 在构造函数现有循环里逐个创建后登记。
     std::shared_ptr<UIWidget> tabs[3];

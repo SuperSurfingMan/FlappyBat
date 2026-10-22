@@ -4,16 +4,26 @@
 #include "imgui.h"
 #include <cfloat>
 
+ToastLayer::ToastLayer() {
+    // 默认不参与更新/渲染；Activate 时整体打开
+    SetUpdateEnabled(false);
+    SetRenderEnabled(false);
+    SetInputEnabled(false);
+}
+
 ToastLayer::ToastLayer(float duration, std::string text, Vec3 color, float textSize, Vec2 position) {
     this->duration = duration;
     this->text = text;
     this->color = color;
     this->textSize = textSize;
     this->position = position;
+
+    SetUpdateEnabled(false);
+    SetRenderEnabled(false);
+    SetInputEnabled(false);
 }
 
-void ToastLayer::Update(float dt) {
-    if (!running) return;
+void ToastLayer::OnUpdate(float dt) {
     timer += dt;
     if (timer >= duration) {
         Reset();
@@ -21,8 +31,8 @@ void ToastLayer::Update(float dt) {
     }
 }
 
-void ToastLayer::Render(SpriteRenderer& renderer) {
-    if (!running) return;
+void ToastLayer::OnDraw(SpriteRenderer& renderer) {
+    (void)renderer;
     DrawImGUILayout();
 }
 
@@ -30,6 +40,8 @@ void ToastLayer::Reset() {
     timer = 0.f;
     alpha = 0.f;
     running = false;
+    SetUpdateEnabled(false);
+    SetRenderEnabled(false);
 }
 
 void ToastLayer::SetColor(Vec3 _color) {
@@ -51,6 +63,8 @@ bool ToastLayer::IsRunning() const {
 void ToastLayer::Activate() {
     Reset();
     running = true;
+    SetUpdateEnabled(true);
+    SetRenderEnabled(true);
 }
 
 void ToastLayer::DrawImGUILayout() {

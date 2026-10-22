@@ -40,6 +40,8 @@ ScoreRankScene::ScoreRankScene() {
     UISystem& ui = UISystem::Get();
     rankGroupId   = ui.CreateGroup(kLayerRankMain);
     dialogGroupId = ui.CreateGroup(kLayerConfirmDialog);
+    rankScope.Bind(rankGroupId, false);
+    dialogScope.Bind(dialogGroupId, true);
 
     // 背景：钟楼内景（优先 v2，失败回退旧背景）
     auto bgTex = ResourceManager::Get().GetTexture2D("v2_ui_scoreboard_bg");
@@ -74,10 +76,9 @@ ScoreRankScene::ScoreRankScene() {
         "清空记录");
     clearRecords->SetOnClick([this](){
         if (scoreRank.empty()) {
-            auto toast = std::static_pointer_cast<ToastLayer>(toastLayer);
-            toast->SetText("暂无记录可清空");
-            toast->SetColor(Vec3{0.941f, 0.722f, 0.314f});
-            toast->Activate();
+            toastLayer->SetText("暂无记录可清空");
+            toastLayer->SetColor(Vec3{0.941f, 0.722f, 0.314f});
+            toastLayer->Activate();
             return;
         }
         OpenClearConfirm();
@@ -91,10 +92,9 @@ ScoreRankScene::ScoreRankScene() {
         52.f);
     syncAndLoad->SetOnClick([this](){
         scoreRank = ScoreRank::Get().GetScoresFromDisk(viewMode);
-        auto toast_cast = std::static_pointer_cast<ToastLayer>(toastLayer);
-        toast_cast->SetText("已加载最新记录");
-        toast_cast->SetColor(Vec3{0.4f, 0.85f, 0.4f});
-        toast_cast->Activate();
+        toastLayer->SetText("已加载最新记录");
+        toastLayer->SetColor(Vec3{0.4f, 0.85f, 0.4f});
+        toastLayer->Activate();
     });
     ui.Add(rankGroupId, syncAndLoad);
 
@@ -126,10 +126,9 @@ ScoreRankScene::ScoreRankScene() {
         scoreRank = ScoreRank::Get().GetScoresFromDisk(viewMode);
         listScroll = listScrollTarget = 0.f;
         CloseClearConfirm();
-        auto toast = std::static_pointer_cast<ToastLayer>(toastLayer);
-        toast->SetText(std::string("已清空") + ScoreRank::ModeName(viewMode) + "记录");
-        toast->SetColor(Vec3{0.870f, 0.360f, 0.360f});
-        toast->Activate();
+        toastLayer->SetText(std::string("已清空") + ScoreRank::ModeName(viewMode) + "记录");
+        toastLayer->SetColor(Vec3{0.870f, 0.360f, 0.360f});
+        toastLayer->Activate();
     });
 
     // ===== 内联热区控件登记（矩形与几何在绘制函数中与绘制同源同步） =====
@@ -175,27 +174,22 @@ void ScoreRankScene::OnEnter() {
     // 每次进入榜单回到顶部
     listScroll = listScrollTarget = 0.f;
 
-    UISystem& ui = UISystem::Get();
-    ui.SetGroupEnabled(rankGroupId, true);
-    ui.SetGroupEnabled(dialogGroupId, false);
+    rankScope.SetEnabled(true);
+    dialogScope.SetEnabled(false);
 }
 
 void ScoreRankScene::OnExit() {
     CloseClearConfirm();
     scoreRank.clear();
-    UISystem& ui = UISystem::Get();
-    ui.SetGroupEnabled(rankGroupId, false);
-    ui.SetGroupEnabled(dialogGroupId, false);
+    rankScope.SetEnabled(false);
+    dialogScope.SetEnabled(false);
 }
 
 void ScoreRankScene::Update(float dt) {
     background->Update(dt);
 
-    // 弹窗开合：模态压栈/弹栈 + 组开关（下层控件由模态自动让位，无需逐个挂起）
-    UISystem& ui = UISystem::Get();
-    ui.SetGroupEnabled(dialogGroupId, confirmClearOpen);
-    if (confirmClearOpen) ui.PushModal(dialogGroupId);
-    else ui.PopModal(dialogGroupId);
+    // 弹窗开合：组开关与模态压栈由 InputScope 原子同步
+    dialogScope.SetEnabled(confirmClearOpen);
 
     if (confirmClearOpen) {
         // 弹窗打开：仅淡入推进与弹窗按钮动画；榜单滚动在绘制侧因控件禁用而自然挂起
@@ -209,7 +203,7 @@ void ScoreRankScene::Update(float dt) {
     confirmYes->Update(dt);
     confirmNo->Update(dt);
 
-    toastLayer->Update(dt);
+    toastLayer->Tick(dt);
 }
 
 void ScoreRankScene::Render(SpriteRenderer& renderer) {
@@ -222,7 +216,7 @@ void ScoreRankScene::Render(SpriteRenderer& renderer) {
     syncAndLoad->DrawLayout();
     clearRecords->DrawLayout();
 
-    toastLayer->Render(renderer);
+    toastLayer->Draw(renderer);
 
     // 确认弹窗最后绘制，覆盖在场景 UI 之上
     if (confirmClearOpen) {
@@ -492,9 +486,7 @@ void ScoreRankScene::OpenClearConfirm() {
     scrimZone->SetEnabled(true);
     dialogBody->SetEnabled(true);
 
-    UISystem& ui = UISystem::Get();
-    ui.SetGroupEnabled(dialogGroupId, true);
-    ui.PushModal(dialogGroupId);
+    dialogScope.SetEnabled(true);
 }
 
 void ScoreRankScene::CloseClearConfirm() {
@@ -508,9 +500,7 @@ void ScoreRankScene::CloseClearConfirm() {
     syncAndLoad->SetShown(true);
     clearRecords->SetShown(true);
 
-    UISystem& ui = UISystem::Get();
-    ui.SetGroupEnabled(dialogGroupId, false);
-    ui.PopModal(dialogGroupId);
+    dialogScope.SetEnabled(false);
 }
 
 void ScoreRankScene::DrawClearConfirmDialog() {

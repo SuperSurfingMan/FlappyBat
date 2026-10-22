@@ -44,31 +44,46 @@ MainSceneOverLayer::MainSceneOverLayer() {
         gameOverTextSprite = std::make_shared<Sprite>(goTex);
         gameOverTextSprite->SetLumaKey(true, 0.06f, 0.10f);
     }
+
+    // 结算层默认关闭，ActivateLayer 时整体打开
+    overScope.Bind(overGroupId, true);
+    SetUpdateEnabled(false);
+    SetRenderEnabled(false);
+    SetInputEnabled(false);
 }
 
 void MainSceneOverLayer::ActivateLayer() {
-    layerActive = true;
-    SyncInputGroups();
+    // 已离开主场景（DetachAll 后）时不得重新开启：否则死亡动画尾帧
+    // 迟到的结算回调会在别的场景里弹出结算模态、抢走点击。
+    if (!IsAttached()) return;
+    SetUpdateEnabled(true);
+    SetRenderEnabled(true);
+    SetInputEnabled(true);
 }
 
-void MainSceneOverLayer::SetInteractive(bool interactive) {
-    if (this->interactive == interactive) return;
-    this->interactive = interactive;
+void MainSceneOverLayer::OnAttach() {
+    // 每次进入场景都从“未结算”开始；结算完成由 ActivateLayer 打开
+    SetUpdateEnabled(false);
+    SetRenderEnabled(false);
+    SetInputEnabled(false);
+}
+
+void MainSceneOverLayer::OnDetach() {
+    SetUpdateEnabled(false);
+    SetRenderEnabled(false);
+    SetInputEnabled(false);
+}
+
+void MainSceneOverLayer::OnInputEnabledChanged(bool) {
     SyncInputGroups();
 }
 
 // 组开关 + 模态压栈：面板激活时才参与命中，离开主场景时自动失效
 void MainSceneOverLayer::SyncInputGroups() {
-    UISystem& ui = UISystem::Get();
-    const bool on = layerActive && interactive;
-    ui.SetGroupEnabled(overGroupId, on);
-    if (on) ui.PushModal(overGroupId);
-    else ui.PopModal(overGroupId);
+    overScope.SetEnabled(InputEnabled());
 }
 
-void MainSceneOverLayer::Update(float dt) {
-    if (!layerActive) return;
-
+void MainSceneOverLayer::OnUpdate(float dt) {
     if (shouldBlink) {
         gameOverImage->Update(dt);
     }
@@ -80,9 +95,7 @@ void MainSceneOverLayer::Update(float dt) {
     backToReadyButton->Update(dt);
 }
 
-void MainSceneOverLayer::Render(SpriteRenderer& renderer) {
-    if (!layerActive) return;
-
+void MainSceneOverLayer::OnDraw(SpriteRenderer& renderer) {
     const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
     const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
     const float cx = WIN_WIDTH * 0.5f;
@@ -120,7 +133,9 @@ void MainSceneOverLayer::Render(SpriteRenderer& renderer) {
 }
 
 void MainSceneOverLayer::Reset() {
-    layerActive = false;
+    SetUpdateEnabled(false);
+    SetRenderEnabled(false);
+    SetInputEnabled(false);
     if (gameOverImage) gameOverImage->Reset();
     if (restartButton) restartButton->Reset();
     if (backToReadyButton) backToReadyButton->Reset();

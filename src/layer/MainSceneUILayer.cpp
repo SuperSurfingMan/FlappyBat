@@ -46,14 +46,35 @@ MainSceneUILayer::MainSceneUILayer() {
         pausedTextSprite = std::make_shared<Sprite>(pausedTex);
         pausedTextSprite->SetLumaKey(true, 0.06f, 0.10f);
     }
+
+    // 组与模态绑定后默认关闭；MainScene 按入场/暂停/结算阶段开启
+    hudScope.Bind(hudGroupId, false);
+    pauseScope.Bind(pauseGroupId, true);
+    SetInputEnabled(false);
 }
 
 MainSceneUILayer::~MainSceneUILayer() {
-    // 兼底注销订阅（正常由 MainScene OnExit 注销）：防退出路径残留悬垂 sink
+    // 兼底注销订阅（正常由 OnDetach 注销）：防退出路径残留悬垂 sink
     UISystem::Get().RemoveGameInputSink(this);
 }
 
-void MainSceneUILayer::Update(float dt) {
+void MainSceneUILayer::OnAttach() {
+    UISystem::Get().AddGameInputSink(this);
+    SetInputEnabled(false); // 进入场景先收起交互，由 MainScene 按阶段开启
+}
+
+void MainSceneUILayer::OnDetach() {
+    UISystem::Get().RemoveGameInputSink(this);
+    SetUpdateEnabled(false);
+    SetRenderEnabled(false);
+    SetInputEnabled(false);
+}
+
+void MainSceneUILayer::OnInputEnabledChanged(bool) {
+    SyncInputGroups();
+}
+
+void MainSceneUILayer::OnUpdate(float dt) {
     // ===== 键盘快捷键（均由 UISystem 推送的 gameInput 快照读取，不再直接询设备） =====
     // ESC / P：切换暂停（未暂停 <-> 暂停）
     if (gameInput.Pressed(GLFW_KEY_ESCAPE) || gameInput.Pressed(GLFW_KEY_P)) {
@@ -82,23 +103,14 @@ void MainSceneUILayer::Update(float dt) {
     quitButton->Update(dt);
 }
 
-void MainSceneUILayer::SetInteractive(bool interactive) {
-    if (this->interactive == interactive) return;
-    this->interactive = interactive;
-    SyncInputGroups();
-}
-
-// 组开关与模态归属的唯一写入点：业务态变了就同步给 UISystem
+// 组开关与模态归属的唯一写入点：业务态变了就同步给 InputScope
 void MainSceneUILayer::SyncInputGroups() {
-    UISystem& ui = UISystem::Get();
-    const bool on = interactive;
-    ui.SetGroupEnabled(hudGroupId, on && !isPausing);
-    ui.SetGroupEnabled(pauseGroupId, on && isPausing);
-    if (on && isPausing) ui.PushModal(pauseGroupId);
-    else ui.PopModal(pauseGroupId);
+    const bool on = InputEnabled();
+    hudScope.SetEnabled(on && !isPausing);
+    pauseScope.SetEnabled(on && isPausing);
 }
 
-void MainSceneUILayer::Render(SpriteRenderer& renderer) {
+void MainSceneUILayer::OnDraw(SpriteRenderer& renderer) {
     const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
     const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
 

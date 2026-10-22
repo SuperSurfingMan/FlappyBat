@@ -1,6 +1,7 @@
 #pragma once
 #include "Layer.h"
 #include "../ui/GameInput.h"
+#include "../ui/InputScope.h"
 #include <memory>
 #include <functional>
 
@@ -14,8 +15,6 @@ public:
     MainSceneUILayer();
     ~MainSceneUILayer() override;
 
-    void Update(float dt) override;
-    void Render(SpriteRenderer& renderer) override;
     void Reset() override;
 
     // IGameInputSink：接收 UISystem 每帧推送的已裁决输入快照
@@ -23,9 +22,17 @@ public:
 
     bool GetPauseState() const;
 
+protected:
+    void OnUpdate(float dt) override;
+    void OnDraw(SpriteRenderer& renderer) override;
+
+    // 挂载时订阅输入；卸载时注销并收起所有 UI 组与模态。
+    void OnAttach() override;
+    void OnDetach() override;
+
     // 局内 UI 是否参与交互：入场倒数 / 转场 / 结算期间由 MainScene 置 false。
-    // 本图层的组开关与模态压栈都在此处集中同步（命中判定归 UISystem）。
-    void SetInteractive(bool interactive);
+    // 组开关与模态压栈都在此处集中同步（命中判定归 UISystem）。
+    void OnInputEnabledChanged(bool enabled) override;
 
 private:
     // 顶部图标按钮（暂停 / 返回 / 退出）
@@ -44,7 +51,6 @@ private:
     std::shared_ptr<Sprite> pausedTextSprite;  // PAUSED 标题图
 
     bool isPausing = false;
-    bool interactive = true;
 
     // 本帧输入快照（仅供 Update 读暂停快捷键；由 OnGameInput 推送）
     GameInputFrame gameInput;
@@ -52,6 +58,8 @@ private:
     // UI 组 id（由 UISystem 分配）：图标排非模态，暂停面板模态压栈
     int hudGroupId = -1;
     int pauseGroupId = -1;
+    InputScope hudScope;   // 顶部图标排（非模态）
+    InputScope pauseScope; // 暂停面板（模态）
 
     // 外部注入：暂停面板的"重新开始"调用
     std::function<void()> onRestartCallback;

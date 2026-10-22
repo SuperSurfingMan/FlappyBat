@@ -46,6 +46,7 @@ AchievementsScene::AchievementsScene() {
     // 注册顺序决定层叠：滚轮区（最大面积）< 滑轨 < 滑块（优先被抓取）
     UISystem& ui = UISystem::Get();
     achGroupId = ui.CreateGroup(20); // 与其它场景主控件同层
+    achScope.Bind(achGroupId, false);
     ui.Add(achGroupId, backToReady);
 
     listZone->SetPlayFeedbackSFX(false);
@@ -64,11 +65,11 @@ AchievementsScene::~AchievementsScene() {}
 void AchievementsScene::OnEnter() {
     // 每次进入成就列表回到顶部
     achScroll = achScrollTarget = 0.f;
-    UISystem::Get().SetGroupEnabled(achGroupId, true);
+    achScope.SetEnabled(true);
 }
 
 void AchievementsScene::OnExit() {
-    UISystem::Get().SetGroupEnabled(achGroupId, false);
+    achScope.SetEnabled(false);
 }
 
 void AchievementsScene::Update(float dt) {
