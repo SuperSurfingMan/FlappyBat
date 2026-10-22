@@ -83,13 +83,9 @@ void SpriteRenderer::Draw_UV(const std::vector<std::shared_ptr<Sprite>>& sprites
 }
 
 void SpriteRenderer::Draw_UV(const std::shared_ptr<Sprite>& sprite)
-{    
-    const auto subsprites = sprite->GetSubspriteList();
-    if (!subsprites.empty()) {
-        for (const auto& subsprite: subsprites)
-            Draw_UV(subsprite);
-    }
-    
+{
+    // 无纹理（如 ButtonSprite，完全程序化绘制）或已停用则不参与 GL 绘制；
+    // 组合渲染由调用方用批量重载（vector）控制顺序，不再向精灵索取子节点
     if (!sprite->GetTexture() || !sprite->getActive()) return;
 
     Begin(spriteProjection);
@@ -131,12 +127,6 @@ void SpriteRenderer::Draw_UV(const std::shared_ptr<Sprite>& sprite)
 
 void SpriteRenderer::Draw_UV_Wave(const std::shared_ptr<Sprite>& sprite)
 {
-    const auto subsprites = sprite->GetSubspriteList();
-    if (!subsprites.empty()) {
-        for (const auto& subsprite : subsprites)
-            Draw_UV_Wave(subsprite);
-    }
-
     if (!sprite->GetTexture() || !sprite->getActive()) return;
 
     Begin(waveShader.get(), spriteProjection);

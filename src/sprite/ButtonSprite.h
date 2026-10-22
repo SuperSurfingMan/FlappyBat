@@ -46,9 +46,6 @@ public:
     // 拆分后由本入口一次设置（绘制仍属 Sprite，交互属 UIWidget）
     void SetShown(bool v) { setActive(v); SetEnabled(v); }
 
-    // 抑制默认纹理渲染（程序化绘制）
-    virtual std::vector<std::shared_ptr<Sprite>> GetSubspriteList() const override { return {}; }
-
 private:
     Style style = Style::Primary;
     UIBuilder::IconKind iconKind = UIBuilder::IconKind::Pause;

@@ -35,8 +35,6 @@ public:
     void setActive(bool active) { isActive = active; }
     bool getActive() const { return isActive; }
 
-    virtual std::vector<std::shared_ptr<Sprite>> GetSubspriteList() const;
-
     const std::shared_ptr<Texture2D>& GetTexture() const;
     const std::unique_ptr<Animation>& GetAnimation() const;
 

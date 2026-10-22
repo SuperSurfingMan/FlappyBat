@@ -111,10 +111,6 @@ const std::unique_ptr<Animation>& Sprite::GetAnimation() const {
     return animation;
 }
 
-std::vector<std::shared_ptr<Sprite>> Sprite::GetSubspriteList() const {
-    return {};
-}
-
 void Sprite::Reset() {
     if (animation) animation->Reset();
     rotation = {1, 0};
