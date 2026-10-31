@@ -347,11 +347,9 @@ struct SpriteGeometry {
     Vec2 position;
 };
 
-struct Point2D;
-
 bool CheckCollision(
     const std::vector<SpriteGeometry>& obstaclesGeometry,
     const SpriteGeometry& batGeometry,
-    const std::array<Point2D, 3>& obsUVCords,
-    const std::array<Point2D, 2>& batUVCords
+    const std::array<Vec2, 3>& obsUVCords,
+    const std::array<Vec2, 2>& batUVCords
 );

@@ -8,7 +8,7 @@
 #include<thread>
 #include<mutex>
 #include<atomic>
-#include "core/Point2D.h"
+#include "core/Math.h"
 #include "render/Texture2D.h"
 
 class RainSystem;
@@ -29,9 +29,9 @@ public:
 
     std::shared_ptr<RainSystem> GetRainSystem();
 
-    const std::array<Point2D, 3> GetUVcords3(const std::string& key);
+    const std::array<Vec2, 3> GetUVcords3(const std::string& key);
 
-    const std::array<Point2D, 2> GetUVcords2(const std::string& key);
+    const std::array<Vec2, 2> GetUVcords2(const std::string& key);
 
     void Init();
 
@@ -101,24 +101,24 @@ private:
     size_t postTaskCursor = 0;
 
 private:
-    const std::array<Point2D, 3> obstacleUpCollisionUVcords = {
-        Point2D{0.522f, 0.0f}, 
-        Point2D{0.281f, 1.0f},
-        Point2D{0.62f, 1.0f}
+    const std::array<Vec2, 3> obstacleUpCollisionUVcords = {
+        Vec2{0.522f, 0.0f}, 
+        Vec2{0.281f, 1.0f},
+        Vec2{0.62f, 1.0f}
     };
 
-    const std::array<Point2D, 3> obstacleDownCollisionUVcords = {
-        Point2D{0.520f, 1.0f}, 
-        Point2D{0.281f, 0.0f},
-        Point2D{0.62f, 0.0f}
+    const std::array<Vec2, 3> obstacleDownCollisionUVcords = {
+        Vec2{0.520f, 1.0f}, 
+        Vec2{0.281f, 0.0f},
+        Vec2{0.62f, 0.0f}
     };
 
-    const std::array<Point2D, 2>  batCollisionUVcords = {
-        Point2D{0.16f, 0.68f}, // 左上
-        Point2D{0.75f, 0.35f}  // 右下
+    const std::array<Vec2, 2>  batCollisionUVcords = {
+        Vec2{0.16f, 0.68f}, // 左上
+        Vec2{0.75f, 0.35f}  // 右下
     };
 
-    std::unordered_map<std::string, std::array<Point2D, 3>> UVcords3Resources;
-    std::unordered_map<std::string, std::array<Point2D, 2>> UVcords2Resources;
+    std::unordered_map<std::string, std::array<Vec2, 3>> UVcords3Resources;
+    std::unordered_map<std::string, std::array<Vec2, 2>> UVcords2Resources;
 
 };

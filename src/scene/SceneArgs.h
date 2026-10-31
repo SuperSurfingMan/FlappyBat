@@ -4,7 +4,7 @@
 // 头文件、更不再 static_pointer_cast 下转设参。字段按需增补，非目标场景自行忽略。
 // =============================================================================
 #include "gameplay/GameMode.h"
-#include "core/Point2D.h"
+#include "core/Math.h"
 #include <optional>
 
 struct SceneArgs {

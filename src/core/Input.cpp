@@ -129,7 +129,7 @@ bool Input::IsKeyReleased(int key)
     return keyReleased[key];
 }
 
-Point2D Input::GetCursorPosition()
+Vec2 Input::GetCursorPosition()
 {
-    return Point2D(mouseX, mouseY);
+    return Vec2(mouseX, mouseY);
 }

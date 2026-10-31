@@ -422,7 +422,7 @@ void ResourceManager::InitSpriteLists() {
     }
 }
 
-const std::array<Point2D, 3> ResourceManager::GetUVcords3(const std::string& key) {
+const std::array<Vec2, 3> ResourceManager::GetUVcords3(const std::string& key) {
     auto it = UVcords3Resources.find(key);
     if (it == UVcords3Resources.end()) {
         std::cout << "[ERROR] No uv coordinates with such a key exists! \n";
@@ -431,7 +431,7 @@ const std::array<Point2D, 3> ResourceManager::GetUVcords3(const std::string& key
     return UVcords3Resources[key];
 }
 
-const std::array<Point2D, 2> ResourceManager::GetUVcords2(const std::string& key) {
+const std::array<Vec2, 2> ResourceManager::GetUVcords2(const std::string& key) {
     auto it = UVcords2Resources.find(key);
     if (it == UVcords2Resources.end()) {
         std::cout << "[ERROR] No uv coordinates with such a key exists! \n";

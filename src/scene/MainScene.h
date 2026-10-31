@@ -7,7 +7,6 @@
 #include <array>
 
 #include "scene/stage/RainSystem.h"
-#include "core/Point2D.h"
 #include "core/Config.h"
 #include "gameplay/GameMode.h"
 #include "gameplay/StageParams.h"        // 模式参数表（与天气子系统共用的事实源）

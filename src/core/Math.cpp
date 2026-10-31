@@ -1,13 +1,50 @@
 #include "core/Math.h"
 #include <memory>
-#include "core/Point2D.h"
+#include <algorithm>
+
+
+// =========================
+// SAT（分离轴定理）辅助（文件内私有）
+// =========================
+
+// 把多边形各顶点投影到 axis 上，得到 [min, max] 区间
+static void ProjectOntoAxis(
+    const std::vector<Vec2>& poly,
+    const Vec2& axis,
+    float& min,
+    float& max)
+{
+    min = max = poly[0].Dot(axis);
+
+    for (size_t i = 1; i < poly.size(); ++i)
+    {
+        float p = poly[i].Dot(axis);
+        min = std::min(min, p);
+        max = std::max(max, p);
+    }
+}
+
+// 两个多边形在 axis 上的投影区间是否重叠
+static bool OverlapOnAxis(
+    const std::vector<Vec2>& polyA,
+    const std::vector<Vec2>& polyB,
+    const Vec2& axis)
+{
+    float minA, maxA;
+    float minB, maxB;
+
+    ProjectOntoAxis(polyA, axis, minA, maxA);
+    ProjectOntoAxis(polyB, axis, minB, maxB);
+
+    return !(maxA < minB || maxB < minA);
+}
 
 
 bool CheckCollision(
     const std::vector<SpriteGeometry>& obstaclesGeometry,
     const SpriteGeometry& batGeometry,
-    const std::array<Point2D, 3>& obsUVCords,
-    const std::array<Point2D, 2>& batUVCords
+    const std::array<Vec2, 3>& obsUVCords,
+    const std::array<Vec2, 2>& batUVCords
 )
 {
     // =========================
@@ -19,7 +56,7 @@ bool CheckCollision(
 
     float batSpriteHalfSize = batScale.x * 0.5; // 蝙蝠贴图半尺寸为32
 
-    std::vector<Point2D> batRect(4);
+    std::vector<Vec2> batRect(4);
 
     float left   = batPos.x - batSpriteHalfSize + batUVCords[0].x * batScale.x;
     float top    = batPos.y - batSpriteHalfSize + batUVCords[0].y * batScale.y;
@@ -41,7 +78,7 @@ bool CheckCollision(
         const auto& obsPos   = obstacle.position;
         const auto& obsScale = obstacle.scale;
 
-        std::vector<Point2D> triangle(3);
+        std::vector<Vec2> triangle(3);
 
         for (int i = 0; i < 3; ++i)
         {
@@ -56,7 +93,7 @@ bool CheckCollision(
         // 3. SAT 轴
         // =========================
 
-        std::vector<Point2D> axes;
+        std::vector<Vec2> axes;
         axes.reserve(5);
 
         // 矩形轴
@@ -66,14 +103,14 @@ bool CheckCollision(
         // 三角形边法线
         for (int i = 0; i < 3; ++i)
         {
-            Point2D edge =
+            Vec2 edge =
             {
                 triangle[(i+1)%3].x - triangle[i].x,
                 triangle[(i+1)%3].y - triangle[i].y
             };
 
-            Point2D normal = { -edge.y, edge.x };
-            axes.push_back(Normalize(normal));
+            Vec2 normal = { -edge.y, edge.x };
+            axes.push_back(normal.Normalized());
         }
 
         // =========================

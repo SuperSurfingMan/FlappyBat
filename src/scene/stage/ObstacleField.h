@@ -1,7 +1,6 @@
 #pragma once
 #include "scene/stage/StageFrame.h"
 #include "core/Math.h"
-#include "core/Point2D.h"
 #include <array>
 #include <functional>
 #include <memory>
@@ -103,9 +102,9 @@ private:
     std::vector<std::shared_ptr<Sprite>> obstaclesDownPool;
     std::array<VariantState, PoolSize> obstacleStates;
     std::array<FlyingState, PoolSize> flyingStates;
-    std::array<Point2D, 3> upCollisionUV;
-    std::array<Point2D, 3> downCollisionUV;
-    std::array<Point2D, 2> batCollisionUV;
+    std::array<Vec2, 3> upCollisionUV;
+    std::array<Vec2, 3> downCollisionUV;
+    std::array<Vec2, 2> batCollisionUV;
 
     float oscillTime = 0.0f;
     float lastSpawnedGapCenter = 0.0f;

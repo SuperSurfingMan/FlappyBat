@@ -1,5 +1,5 @@
 #pragma once
-#include "core/Point2D.h"
+#include "core/Math.h"
 
 // 不让 glfw3.h 拉入系统 GL 头（GL 函数统一由 glad 提供），
 // 从而 Input.h 可被任意顺序包含而不与 glad 冲突
@@ -24,7 +24,7 @@ public:
     static bool IsKeyDown(int key);       // 持续按住
     static bool IsKeyReleased(int key);   // 本帧释放
 
-    static Point2D GetCursorPosition();
+    static Vec2 GetCursorPosition();
 private:
     static constexpr int MouseButtonCount = 3;
     static constexpr int KeyCount = GLFW_KEY_LAST + 1;
