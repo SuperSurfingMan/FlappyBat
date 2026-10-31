@@ -1,7 +1,9 @@
 #include "audio/AudioSystem.h"
+#include "app/UnifiedSave.h"
 #include <algorithm>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 
 AudioSystem& AudioSystem::Instance()
 {
@@ -209,6 +211,26 @@ void AudioSystem::SetSFXVolume(float v)
 
 void AudioSystem::LoadSettings()
 {
+    // 统一存档：V 标签行 = "V <master> <bgm> <sfx>"（AudioSystem 专属标签，见 app/UnifiedSave.h）
+    for (const auto& line : UnifiedSave::ReadAllLines())
+    {
+        if (line.rfind("V ", 0) != 0)
+            continue;
+
+        std::istringstream ss(line.substr(2));
+        float master = 0.0f, bgm = 0.0f, sfx = 0.0f;
+        if (ss >> master >> bgm >> sfx)
+        {
+            // 限定到合理范围后应用
+            if (master >= 0.0f && master <= 1.0f) SetMasterVolume(master);
+            if (bgm >= 0.0f && bgm <= 1.0f)       SetBGMVolume(bgm);
+            if (sfx >= 0.0f && sfx <= 1.0f)       SetSFXVolume(sfx);
+            return;
+        }
+    }
+
+    // 一次性迁移：统一存档尚无音量数据时，读旧版独立二进制 audio_settings.dat，
+    // 成功后立即写入统一存档，此后旧文件不再读取（与 profile.dat/achievements.dat 同策略）
     std::ifstream f("audio_settings.dat", std::ios::binary);
     if (!f) return;
 
@@ -217,18 +239,16 @@ void AudioSystem::LoadSettings()
         f.read(reinterpret_cast<char*>(&bgm), sizeof(float)) &&
         f.read(reinterpret_cast<char*>(&sfx), sizeof(float)))
     {
-        // 限定到合理范围后应用
         if (master >= 0.0f && master <= 1.0f) SetMasterVolume(master);
-        if (bgm >= 0.0f && bgm <= 1.0f)     SetBGMVolume(bgm);
-        if (sfx >= 0.0f && sfx <= 1.0f)     SetSFXVolume(sfx);
+        if (bgm >= 0.0f && bgm <= 1.0f)       SetBGMVolume(bgm);
+        if (sfx >= 0.0f && sfx <= 1.0f)       SetSFXVolume(sfx);
+        SaveSettings();
     }
 }
 
 void AudioSystem::SaveSettings()
 {
-    std::ofstream f("audio_settings.dat", std::ios::binary);
-    if (!f) return;
-    f.write(reinterpret_cast<const char*>(&m_masterVolume), sizeof(float));
-    f.write(reinterpret_cast<const char*>(&m_bgmVolume), sizeof(float));
-    f.write(reinterpret_cast<const char*>(&m_sfxVolume), sizeof(float));
+    std::ostringstream ss;
+    ss << "V " << m_masterVolume << " " << m_bgmVolume << " " << m_sfxVolume;
+    UnifiedSave::RewriteSection({"V"}, {ss.str()});
 }

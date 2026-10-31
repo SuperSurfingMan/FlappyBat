@@ -10,6 +10,7 @@
 #include "core/Config.h"
 
 #include "res/ResourceManager.h"
+#include "scene/stage/RainSystem.h" // RequestLightningStrike 转发目标（TriggerStrikeAt 完整类型）
 #include "audio/AudioSystem.h"
 #include <GLFW/glfw3.h>   // 仅取 GLFW_KEY_* / GLFW_MOUSE_BUTTON_* 常量（输入由 UISystem 推送）
 #include "imgui.h"
@@ -673,6 +674,12 @@ void MainScene::PostWeatherMsg(int slot, const std::string& text, float flashTim
 
 void MainScene::RemoveWeatherMsg(int slot) {
     weather.Remove(slot);
+}
+
+void MainScene::RequestLightningStrike(float worldX) {
+    // 怪物侧脚本落雷：转发到雨系统既有管线（预警/危险窗/音效/渲染），场景不解释怪物意图
+    if (auto rs = ResourceManager::Get().GetRainSystem())
+        rs->TriggerStrikeAt(worldX);
 }
 
 // ===== 多模式（B9）：模式差异的唯一事实来源 =====

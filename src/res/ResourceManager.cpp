@@ -9,6 +9,7 @@
 #include "core/Config.h"
 #include "core/Math.h"
 
+#include <array>
 #include <iostream>
 #include <cstdlib>
 #include <cmath>

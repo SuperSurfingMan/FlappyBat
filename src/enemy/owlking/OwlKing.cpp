@@ -5,7 +5,6 @@
 #include "res/ResourceManager.h"
 #include "core/Config.h"
 #include "audio/AudioSystem.h"
-#include "scene/stage/RainSystem.h" // B5 雷暴召唤：TriggerStrikeAt 需完整类型
 #include "enemy/IStageFeedback.h"
 #include "ui/UIBuilder.h"
 #include "ui/UITheme.h"
@@ -610,11 +609,12 @@ void OwlKing::UpdateSkill(float dt, const EnemyContext& ctx) {
                 }
             } else if (curSkill == Skill::StormCall) {
                 // B5 雷暴召唤（§5）：0.8s 起三道雷按 0.5s 间隔逐次落下
-                // （预警虚线由本侧自绘先行展示；落雷复用 RainSystem 管线：危险窗/音效/渲染）
+                // （预警虚线由本侧自绘先行展示；落雷经 IStageFeedback 收口，
+                //   场景转发到雨系统管线：危险窗/音效/渲染复用既有路径）
+                IStageFeedback& fx = *ctx_->fx;
                 while (stormStruck < 3 &&
                        skillTimer >= StormBoltFirst + StormBoltGap * (float)stormStruck) {
-                    if (auto rs = ResourceManager::Get().GetRainSystem())
-                        rs->TriggerStrikeAt(stormXs[stormStruck]);
+                    fx.RequestLightningStrike(stormXs[stormStruck]);
                     stormStruck++;
                 }
                 if (skillTimer >= StormCallActiveDur) {

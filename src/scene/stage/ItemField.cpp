@@ -6,6 +6,7 @@
 #include "sprite/CollectableSprite.h"
 #include "ui/UITheme.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 

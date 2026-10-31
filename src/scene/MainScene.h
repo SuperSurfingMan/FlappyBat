@@ -6,7 +6,6 @@
 #include <string>
 #include <array>
 
-#include "scene/stage/RainSystem.h"
 #include "core/Config.h"
 #include "gameplay/GameMode.h"
 #include "gameplay/StageParams.h"        // 模式参数表（与天气子系统共用的事实源）
@@ -25,7 +24,6 @@
 #include "enemy/EnemyDirector.h"     // 怪物框架（含 IEnemy/EncounterRules 契约）
 #include "enemy/IStageFeedback.h"    // MainScene 实现表现服务接口（需完整类型）
 
-class RainSystem;
 class MainSceneUILayer;
 class MainSceneOverLayer;
 class ToastLayer;
@@ -135,6 +133,8 @@ private:
     void PostWeatherMsg(int slot, const std::string& text,
                         float flashTime = 2.0f, bool autoSteady = false) override;
     void RemoveWeatherMsg(int slot) override;
+    // 脚本落雷申请：薄转发到雨系统（怪物经 ctx.fx 复用既有落雷管线）
+    void RequestLightningStrike(float worldX) override;
     void AddCoins(int n) override;
     void AddTimeLimit(float sec) override;
     void ReportAchievement(AchievementEvent event, long long value) override;

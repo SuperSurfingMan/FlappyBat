@@ -1,4 +1,5 @@
 #include "scene/stage/ObstacleField.h"
+#include "gameplay/Collision.h"
 #include "core/Config.h"
 #include "render/SpriteRenderer.h"
 #include "res/ResourceManager.h"

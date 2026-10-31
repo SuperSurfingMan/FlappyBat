@@ -25,6 +25,8 @@ struct IStageFeedback {
     virtual void PostWeatherMsg(int slot, const std::string& text,
                                 float flashTime, bool autoSteady) = 0;
     virtual void RemoveWeatherMsg(int slot) = 0;
+    // 脚本落雷申请：经场景转发到雨系统管线（复用预警/危险窗/音效/渲染），怪物不直连场景类型
+    virtual void RequestLightningStrike(float worldX) = 0;
 
     // ---- 结算通道（场景侧自动叠加模式倍率/存档/成就上报等既有规则）----
     virtual void AddScore(size_t base) = 0;      // 走 AddScore 统一入口（模式倍率/成就自动生效）

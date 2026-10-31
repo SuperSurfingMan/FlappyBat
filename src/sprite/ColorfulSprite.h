@@ -1,3 +1,4 @@
+#pragma once
 #include "sprite/Sprite.h"
 
 class ColorfulSprite : public Sprite {

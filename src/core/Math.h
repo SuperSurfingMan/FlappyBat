@@ -4,7 +4,9 @@
 #include <string>
 #include <cmath>
 #include <random>
-#include <array>
+#include <utility>  // std::swap（Clamp 用）
+// 注：<vector>/<string> 供大量仅经本头传递获得 STL 的既有使用方（历史契约）；
+// 新代码请自行包含所需标准头，不要扩大对该传递包含的依赖。
 
 inline void Ortho(
     float left, float right,
@@ -341,15 +343,3 @@ public:
     }
 
 };
-
-struct SpriteGeometry {
-    Vec2 scale;
-    Vec2 position;
-};
-
-bool CheckCollision(
-    const std::vector<SpriteGeometry>& obstaclesGeometry,
-    const SpriteGeometry& batGeometry,
-    const std::array<Vec2, 3>& obsUVCords,
-    const std::array<Vec2, 2>& batUVCords
-);
