@@ -6,7 +6,6 @@
 #include "../res/ResourceManager.h"
 #include "../sprite/Sprite.h"
 #include "../Config.h"
-#include "../app/Application.h"
 #include "../app/Achievements.h"
 #include "SceneManager.h"
 #include "imgui.h"
@@ -39,7 +38,7 @@ AchievementsScene::AchievementsScene() {
         Vec2{290.f, UITheme::MainBtnH},
         "返回主菜单");
     backToReady->SetOnClick([](){
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
+        SceneManager::Instance().RequestScene(SceneId::Ready);
     });
 
     // ===== UI 控件组与热区登记（矩形在 DrawAchievements 中与绘制同源） =====

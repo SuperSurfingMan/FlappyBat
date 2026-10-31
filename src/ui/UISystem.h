@@ -60,6 +60,13 @@ public:
     void Dispatch();
     void EndFrame();
 
+    // ===== 全屏交互闸门 =====
+    // 转场遮罩等全屏接管期间由 Application 每帧同步（值取自 SceneManager::IsTransitionActive）：
+    // true 时本帧一切控件交互冻结（悬停/按下/点击清空，走 Cancel 卫生路径）；
+    // 玩法输入快照照常推送，是否忽略由场景按自身流程决定
+    void SetInteractionBlocked(bool blocked) { interactionBlocked = blocked; }
+    bool IsInteractionBlocked() const { return interactionBlocked; }
+
     // ===== 玩法输入推送（同在 Dispatch 中完成，在 UI 归属裁决之后） =====
     // 场景声明自己关注的键位：UI 系统不解释玩法语义，只按帧推送这些键的状态
     void WatchKeys(std::vector<int> keys);
@@ -126,4 +133,7 @@ private:
     // 玩法输入
     std::vector<int> watchedKeys;
     std::vector<IGameInputSink*> gameSinks;  // 多播：玩法与 UI 快捷键接收者均可订阅
+
+    // 全屏交互闸门（每帧由 Application 依 SceneManager 状态同步）
+    bool interactionBlocked = false;
 };

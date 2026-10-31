@@ -6,7 +6,6 @@
 #include "../res/ResourceManager.h"
 #include "../sprite/Sprite.h"
 #include "../Config.h"
-#include "../app/Application.h"
 #include "../app/ScoreRank.h"
 #include "../font/FontManager.h"
 #include "../layer/ToastLayer.h"
@@ -65,7 +64,7 @@ ScoreRankScene::ScoreRankScene() {
         Vec2{290.f, UITheme::MainBtnH},
         "返回主菜单");
     backToReady->SetOnClick([](){
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
+        SceneManager::Instance().RequestScene(SceneId::Ready);
     });
     ui.Add(rankGroupId, backToReady);
 

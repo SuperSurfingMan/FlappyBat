@@ -11,14 +11,6 @@ class Scene;
 class Application
 {
 public:
-    enum class Scenes {
-        ReadyScene,
-        MainScene,
-        ScoreRankScene,
-        AchievementsScene,
-        SettingsScene
-    };
-
     static Application& Get();
 
     bool Init(int width, int height, const char* title);
@@ -31,8 +23,6 @@ public:
     GLFWwindow* GetWindow() const { return window; }
 
     void SetSystems(SceneManager* sm, SpriteRenderer* sr);
-
-    std::shared_ptr<Scene> GetScene(Scenes scene);
 private:
     Application() = default;
     ~Application() = default;
@@ -43,6 +33,7 @@ private:
 private:
     static void GLFWCloseCallback(GLFWwindow* window);
 
+    // 资源就绪后构造其余场景并登记进 SceneManager 注册表（SceneId 寻址）
     void InitScenes();
 private:
     GLFWwindow* window = nullptr;
@@ -56,9 +47,4 @@ private:
     SpriteRenderer* spriteRenderer = nullptr;
 
     std::shared_ptr<Scene> bootScene = nullptr;
-    std::shared_ptr<Scene> readyScene = nullptr;
-    std::shared_ptr<Scene> mainScene = nullptr;
-    std::shared_ptr<Scene> scoreRankScene = nullptr;
-    std::shared_ptr<Scene> achievementsScene = nullptr;
-    std::shared_ptr<Scene> settingsScene = nullptr;
 };

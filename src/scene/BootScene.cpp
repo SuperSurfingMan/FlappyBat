@@ -1,7 +1,6 @@
 #include "../sprite/FadeSprite.h"
 #include "../SpriteRenderer.h"
 #include "BootScene.h"
-#include "../app/Application.h"
 #include "SceneManager.h"
 #include "../Config.h"
 #include "../res/ResourceManager.h"
@@ -33,7 +32,7 @@ void BootScene::Update(float dt) {
     // 动画结束且所有资源加载完成后，才跳转到 ReadyScene
     if (IsFinished() && ResourceManager::Get().IsLoadingComplete()) {
         // 跳转到 ReadyScene
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
+        SceneManager::Instance().RequestScene(SceneId::Ready);
     }
 }
 

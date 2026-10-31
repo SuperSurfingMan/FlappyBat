@@ -30,7 +30,6 @@
 #include "../ui/UIBuilder.h"
 #include "../ui/UITheme.h"
 #include "../ui/UISystem.h"
-#include "../ui/TransitionMask.h"
 
 namespace {
 // 局内 HUD 交互组层叠：低于暂停面板(40)/结算面板(50)，与顶部图标排(10) 同时参与命中
@@ -38,11 +37,11 @@ constexpr int kLayerMainHud = 12;
 }
 
 // GameMode -> ScoreRank::RankMode：两枚举成员一一对应，显式映射避免隐式耦合
-static ScoreRank::RankMode ToRankMode(MainScene::GameMode m) {
+static ScoreRank::RankMode ToRankMode(::GameMode m) {
     switch (m) {
-        case MainScene::GameMode::TimeRush:   return ScoreRank::RankMode::TimeRush;
-        case MainScene::GameMode::StormNight: return ScoreRank::RankMode::StormNight;
-        case MainScene::GameMode::Classic:    break;
+        case ::GameMode::TimeRush:   return ScoreRank::RankMode::TimeRush;
+        case ::GameMode::StormNight: return ScoreRank::RankMode::StormNight;
+        case ::GameMode::Classic:    break;
     }
     return ScoreRank::RankMode::Classic;
 }
@@ -143,13 +142,21 @@ void MainScene::OnEnter()
         weather.Post(WMsgStorm, "风暴之夜", 0.8f, true);
     }
 
-    // 入场流程：从准备界面"开始游戏"进入时转场遮罩仍在（先揭示后倒数）；
-    // 局内重开无遮罩，直接 3-2-1 倒数。开局无敌改由倒数结束时统一给予。
-    const bool maskActive = TransitionMask::Get().IsActive();
+    // 入场流程：从准备界面"开始游戏"进入时转场仍在全屏接管（先揭示后倒数）；
+    // 局内重开无转场，直接 3-2-1 倒数。开局无敌改由倒数结束时统一给予。
+    // 本场景只查询 SceneManager 的接管状态，不认识任何具体转场实现
+    const bool maskActive = SceneManager::Instance().IsTransitionActive();
     flow.OnEnter(maskActive);
     if (!maskActive) {
         AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Countdown), 0.5f);
     }
+}
+
+void MainScene::OnPrepare(const SceneArgs& args)
+{
+    // 启动参数（对局模式）须在 Reset 前到位：Reset 的 flow.Reset(params())、
+    // 天气基线与初始障碍布局都依赖模式参数表
+    flow.SetMode(args.gameMode);
 }
 
 void MainScene::OnExit()
@@ -486,11 +493,9 @@ void MainScene::UpdateTerrain(float dt)
 void MainScene::DrawImGUILayout() {
     if (flow.IsGameOver()) return; // 死亡时不绘制调试 HUD
 
-    // 转场遮罩期间：只保留中央圆形视野（蝙蝠），主界面 UI 尚未弹出
-    if (flow.MaskPhase()) {
-        TransitionMask::Get().Draw();
-        return;
-    }
+    // 转场揭示期（入场 Mask 相位）只露中央圆形视野：主界面 UI 尚未弹出；
+    // 遮罩本体由 SceneManager 于场景绘制后统一叠加，此处只控制 HUD 不出现
+    if (flow.MaskPhase()) return;
 
     // 常驻 HUD 第一段：SCORE / 能量 / 金币 / 俯冲（位于天气消息盒之下）
     StageHud::Snapshot snap = BuildHudSnapshot();
@@ -514,14 +519,11 @@ void MainScene::DrawImGUILayout() {
     // 3-2-1 倒数大字（倒数期间主界面 UI 已弹出）
     hud.DrawCountdown(snap);
 
-    // 转场遮罩（非激活时为空操作；正常路径此时已结束，仅兜底）
-    TransitionMask::Get().Draw();
-
     // 调试面板（保留，但改为默认收起，减少干扰）
     if (showDebugPanel) {
         ImGui::Begin("Scene Control");
         if (ImGui::Button("Go To Ready Scene")) {
-            SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
+            SceneManager::Instance().RequestScene(SceneId::Ready);
             std::cout << "Switched to ready scene..." << std::endl;
         }
         if (ImGui::Button("Reset Game")) {
@@ -644,12 +646,9 @@ void MainScene::SpawnFloatText(const std::string& text, Vec2 worldPos,
 // ===== 入场流程（转场遮罩 + 3-2-1 倒数） =====
 
 void MainScene::UpdateIntro(float dt) {
-    // 遮罩阶段：驱动揭示动画，揭示完毕由 RunFlow 转入 3-2-1
-    if (flow.MaskPhase()) {
-        TransitionMask::Get().Update(dt);
-    }
-
-    const RunFlow::IntroTick ev = flow.TickIntro(dt, TransitionMask::Get().IsActive());
+    // 遮罩阶段：转场动画由 SceneManager（TickTransition）驱动，本场景只等待其结束；
+    // 揭示完毕由 RunFlow 转入 3-2-1
+    const RunFlow::IntroTick ev = flow.TickIntro(dt, SceneManager::Instance().IsTransitionActive());
     if (ev.becameCounting) {
         AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Countdown), 0.5f);
     }

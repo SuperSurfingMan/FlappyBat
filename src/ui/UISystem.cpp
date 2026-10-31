@@ -118,8 +118,15 @@ void UISystem::Dispatch() {
     const bool down        = Input::IsMouseDown(kBtn);
     const bool releaseEdge = Input::IsMouseReleased(kBtn);
 
-    // 0) 上帧目标本帧已失活（组关闭 / 被模态遮挡 / 注销）：先清理，避免残留高亮
+    // 0) 上帧目标本帧已失活（组关闭 / 被模态遮挡 / 注销 / 全屏接管）：先清理，避免残留高亮
     CancelStaleTargets();
+
+    // 0.5) 全屏接管（转场遮罩等）：一切控件交互冻结，仅照常推送玩法输入快照，
+    //      由场景按自身流程决定是否忽略（如主场景入场阶段本就不读点击）
+    if (interactionBlocked) {
+        PushGameInput(pressEdge, down, releaseEdge);
+        return;
+    }
 
     // 1) 整帧唯一一次命中判定：谁该被激活，只在这里决定
     UIWidget* hit = PickHit(pointer.x, pointer.y);
@@ -218,7 +225,8 @@ bool UISystem::IsWidgetLive(const UIWidget* w) const {
 void UISystem::CancelStaleTargets() {
     UIWidget* targets[3] = { hovered, pressed, captured };
     for (UIWidget* w : targets) {
-        if (!w || IsWidgetLive(w)) continue;
+        // 全屏接管（转场遮罩等）与组失活同责：目标一律视为不再可交互
+        if (!w || (IsWidgetLive(w) && !interactionBlocked)) continue;
         if (hovered == w) hovered = nullptr;
         if (pressed == w) {
             pressed = nullptr;

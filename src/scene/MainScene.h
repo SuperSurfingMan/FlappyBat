@@ -43,11 +43,10 @@ public:
     void Render(SpriteRenderer& renderer) override;
     void Reset() override;
 
-    // ===== 多模式（B9）：由 ReadyScene 在进入前设置 =====
-    // 枚举本体在 src/GameMode.h（怪物框架需按模式取参，不允许反向依赖场景）；
-    // 类内别名保持 MainScene::GameMode 的既有引用方式不变
-    using GameMode = ::GameMode;
-    void SetMode(GameMode m) { flow.SetMode(m); }
+    // ===== 多模式（B9）：对局模式经 SceneArgs 于切场时注入（OnPrepare），场景间不再直接设参 =====
+    // 枚举本体在 src/GameMode.h（怪物框架需按模式取参，不允许反向依赖场景头文件）；
+    // 局内重开（暂停/结算面板）不经 SceneManager，直接 Reset+OnEnter，模式自然保留
+    void OnPrepare(const SceneArgs& args) override;
 
     // ===== IGameInputSink（玩法输入不再由本场景逐帧询问设备） =====
     // UISystem 每帧先做 UI 命中裁决与控件派发，再把“剩下的输入”作为本帧快照推过来；

@@ -1,33 +1,29 @@
 #pragma once
 // =============================================================================
-// 圆形聚焦转场遮罩（ReadyScene -> MainScene 专用）
+// 圆形聚焦转场（ReadyScene -> MainScene 专用）—— ISceneTransition 的首个实现。
 // 聚焦：孔径自全开收缩到恰好框住中央蝙蝠（ease-in 立方：缓慢起步、加速吸入）
-// 保持：孔径轻微呼吸抖动（切幕窗口，遮罩状态跨场景延续）
+// 保持：孔径轻微呼吸抖动（切幕窗口；换景由 SceneManager 在 ReadyToSwitch 时执行，
+//       本对象由 SceneManager 持有，状态天然跨场景延续）
 // 揭示：孔径弹性扩张至全开（ease-out back：爆发过冲后回弹，与聚焦刻意不对称）
 // 绘制走 ImGui 前景层：孔外纯黑环形三角扇 + 孔缘琥珀光环
 // =============================================================================
+#include "ISceneTransition.h"
 #include "imgui.h"
-#include "UITheme.h"
+#include "../ui/UITheme.h"
 #include <cmath>
 #include <algorithm>
 
-class TransitionMask {
+class CircleFocusTransition : public ISceneTransition {
 public:
-    static TransitionMask& Get() {
-        static TransitionMask instance;
-        return instance;
-    }
-
-    // 开始聚焦。center 为屏幕坐标（蝙蝠所在位置，两场景蝙蝠同位以营造连续感）
-    void StartFocus(float screenCx, float screenCy) {
+    void Start(const TransitionContext& ctx) override {
         if (phase != Phase::None) return; // 已在转场中，忽略重复触发
         phase = Phase::Focus;
-        center = ImVec2(screenCx, screenCy);
+        center = ImVec2(ctx.focusAnchor.x, ctx.focusAnchor.y);
         timer = 0.0f;
         holeRadius = MaxRadius;
     }
 
-    void Update(float dt) {
+    void Update(float dt) override {
         if (phase == Phase::None) return;
         timer += dt;
         clock += dt;
@@ -45,7 +41,7 @@ public:
             }
             break;
         case Phase::Hold:
-            // 呼吸微抖蓄力；此阶段内完成场景切换（由 ReadyScene 触发）
+            // 呼吸微抖蓄力；此阶段内完成场景切换（SceneManager 于 ReadyToSwitch 时换景）
             holeRadius = FocusRadius + std::sin(clock * 18.0f) * 2.5f;
             if (timer >= HoldDuration) {
                 timer = 0.0f;
@@ -57,7 +53,7 @@ public:
             // ease-out back：爆发式张开并过冲，随后回弹收尾
             holeRadius = FocusRadius + (MaxRadius * 1.15f - FocusRadius) * EaseOutBack(t);
             if (timer >= RevealDuration) {
-                phase = Phase::None; // 揭示完成，遮罩消失
+                phase = Phase::None; // 揭示完成，转场结束
             }
             break;
         }
@@ -67,7 +63,7 @@ public:
     }
 
     // ImGui 前景层绘制：环形三角扇铺满孔外全部区域（纯黑）+ 孔缘光环
-    void Draw() {
+    void Draw() override {
         if (phase == Phase::None) return;
         ImDrawList* dl = ImGui::GetForegroundDrawList();
 
@@ -107,12 +103,11 @@ public:
         }
     }
 
-    bool IsActive() const { return phase != Phase::None; }
-    bool IsFocusDone() const { return phase == Phase::Hold; } // 聚焦到位，可以切场景
+    bool ReadyToSwitch() const override { return phase == Phase::Hold; } // 聚焦到位，可以切场景
+    bool IsFinished() const override { return phase == Phase::None; }    // 揭示完成，可拆除覆盖层
+    bool BlocksInteraction() const override { return phase != Phase::None; }
 
 private:
-    TransitionMask() = default;
-
     static float EaseOutBack(float t) {
         const float c1 = 1.70158f;
         const float c3 = c1 + 1.0f;

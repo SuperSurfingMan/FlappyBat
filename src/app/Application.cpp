@@ -100,7 +100,8 @@ void Application::SetSystems(SceneManager* sm, SpriteRenderer* sr)
 {
     sceneManager = sm;
     bootScene = std::make_shared<BootScene>();
-    sceneManager->ChangeScene(bootScene);
+    sm->Register(SceneId::Boot, bootScene);
+    sm->ChangeScene(bootScene);
     spriteRenderer = sr;
 }
 
@@ -110,25 +111,12 @@ void Application::GLFWCloseCallback(GLFWwindow* window)
 }
 
 void Application::InitScenes() {
-    readyScene = std::make_shared<ReadyScene>();
-    mainScene = std::make_shared<MainScene>();
-    scoreRankScene = std::make_shared<ScoreRankScene>();
-    achievementsScene = std::make_shared<AchievementsScene>();
-    settingsScene = std::make_shared<SettingsScene>();
-}
-
-std::shared_ptr<Scene> Application::GetScene(Scenes scene) {
-    if (scene == Scenes::MainScene)
-        return mainScene;
-    else if (scene == Scenes::ReadyScene)
-        return readyScene;
-    else if (scene == Scenes::ScoreRankScene)
-        return scoreRankScene;
-    else if (scene == Scenes::AchievementsScene)
-        return achievementsScene;
-    else if (scene == Scenes::SettingsScene)
-        return settingsScene;
-    return nullptr;
+    // 场景构造后登记进 SceneManager 注册表；此后所有切场均以 SceneId 寻址
+    sceneManager->Register(SceneId::Ready,       std::make_shared<ReadyScene>());
+    sceneManager->Register(SceneId::Main,        std::make_shared<MainScene>());
+    sceneManager->Register(SceneId::ScoreRank,   std::make_shared<ScoreRankScene>());
+    sceneManager->Register(SceneId::Achievements,std::make_shared<AchievementsScene>());
+    sceneManager->Register(SceneId::Settings,    std::make_shared<SettingsScene>());
 }
 
 void Application::RequestQuit()
@@ -217,11 +205,15 @@ void Application::Run()
         // ===== UI 事件派发：每帧一次集中命中判定，先于场景逻辑 =====
         // 控件不再自行轮询鼠标；Dispatch 之后本帧的鼠标归属与"按键是否被 UI 消费"已确定
         UISystem::Get().BeginFrame(dt);
+        // 全屏交互闸门：转场进行中冻结一切控件交互（值在本帧派发前同步）
+        UISystem::Get().SetInteractionBlocked(sceneManager->IsTransitionActive());
         UISystem::Get().Dispatch();
 
         AudioSystem::Instance().Update(); // 更新音频系统，清理已完成的音效
+        sceneManager->TickTransition(dt); // 转场推进与遮蔽中点换景（先于场景逻辑，切幕当帧即新场景接管）
         sceneManager->GetCurrentScene()->Update(dt);
         sceneManager->GetCurrentScene()->Render(*spriteRenderer);
+        sceneManager->DrawTransitionOverlay(); // 转场覆盖层最后追加：永远压在场景与 HUD 之上
 
         UISystem::Get().EndFrame();
 

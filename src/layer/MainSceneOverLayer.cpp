@@ -3,7 +3,6 @@
 #include "../ui/UIBuilder.h"
 #include "../ui/UITheme.h"
 #include "../ui/UISystem.h"
-#include "../app/Application.h"
 #include "../res/ResourceManager.h"
 #include "../sprite/Sprite.h"
 #include "../Config.h"
@@ -198,7 +197,7 @@ void MainSceneOverLayer::InitSprites() {
         Vec2{UITheme::SecondaryBtnW, UITheme::SecondaryBtnH},
         "返回主菜单");
     backToReadyButton->SetOnClick([](){
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
+        SceneManager::Instance().RequestScene(SceneId::Ready);
     });
     ui.Add(overGroupId, backToReadyButton);
 }

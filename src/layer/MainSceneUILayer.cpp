@@ -171,7 +171,7 @@ void MainSceneUILayer::InitAllButtons() {
     homeButton = std::make_shared<ButtonSprite>(
         UIBuilder::IconKind::Home, Vec2{cx, cy}, iconSize);
     homeButton->SetOnClick([](){
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
+        SceneManager::Instance().RequestScene(SceneId::Ready);
     });
     ui.Add(hudGroupId, homeButton);
 
@@ -212,7 +212,7 @@ void MainSceneUILayer::InitAllButtons() {
         Vec2{UITheme::SecondaryBtnW, UITheme::SecondaryBtnH},
         "返回主菜单");
     homeButtonInPanel->SetOnClick([](){
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
+        SceneManager::Instance().RequestScene(SceneId::Ready);
     });
     ui.Add(pauseGroupId, homeButtonInPanel);
 }

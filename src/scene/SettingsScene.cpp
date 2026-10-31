@@ -6,7 +6,6 @@
 #include "../res/ResourceManager.h"
 #include "../sprite/Sprite.h"
 #include "../Config.h"
-#include "../app/Application.h"
 #include "../audio/AudioSystem.h"
 #include "../scene/SceneManager.h"
 #include "imgui.h"
@@ -36,7 +35,7 @@ SettingsScene::SettingsScene() {
         Vec2{UITheme::MainBtnW, UITheme::MainBtnH},
         "返回主菜单");
     backToReady->SetOnClick([](){
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ReadyScene));
+        SceneManager::Instance().RequestScene(SceneId::Ready);
     });
 
     // UI 控件组：返回按钮与三条滑条均登记到 UISystem；滑条按下即捕获（拖出轨道仍跟随）

@@ -11,8 +11,7 @@
 #include "../app/Application.h"
 #include "../res/ResourceManager.h"
 #include "../sprite/BatSprite.h"
-#include "../ui/TransitionMask.h"
-#include "MainScene.h"
+#include "../GameMode.h"
 #include "../app/PlayerProfile.h"
 #include "../audio/AudioSystem.h"
 #include <cstdio>
@@ -56,12 +55,8 @@ void ReadyScene::OnExit() {
 }
 
 void ReadyScene::Update(float dt) {
-    // ===== 转场遮罩：聚焦完成的同一帧切到主场景（遮罩状态跨场景延续） =====
-    TransitionMask::Get().Update(dt);
-    if (TransitionMask::Get().IsFocusDone()) {
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::MainScene));
-        return;
-    }
+    // 转场驱动与遮蔽中点切幕已上收 SceneManager（TickTransition）；本场景只查询状态做本地闸门
+    const bool transitioning = SceneManager::Instance().IsTransitionActive();
 
     // 升级面板：ESC 关闭（读 UISystem 推送的快照，不再直接询设备）
     if (upgradePanelOpen && gameInput.Pressed(GLFW_KEY_ESCAPE)) {
@@ -69,8 +64,9 @@ void ReadyScene::Update(float dt) {
     }
 
     // ===== UI 交互闸门 =====
-    // 转场进行中主菜单不可点；升级面板弹开时以模态独占命中
-    menuScope.SetEnabled(!TransitionMask::Get().IsActive());
+    // 转场进行中主菜单不可点（UISystem 侧另有全屏闸门，此处同步关闭组兜底）；
+    // 升级面板弹开时以模态独占命中
+    menuScope.SetEnabled(!transitioning);
     upgradeScope.SetEnabled(upgradePanelOpen);
 
     // 金币不足提示倒计时（升级面板内点击买不起的轨道时触发）
@@ -83,7 +79,7 @@ void ReadyScene::Update(float dt) {
 
     // 转场/升级面板打开期间菜单按钮冻结，避免中途点到其它入口；
     // 分裂期间开始按钮（menuButtons[0]）由自定义绘制接管，不参与常规更新
-    if (!TransitionMask::Get().IsActive() && !upgradePanelOpen) {
+    if (!transitioning && !upgradePanelOpen) {
         for (size_t i = 0; i < menuButtons.size(); ++i) {
             if (i == 0 && modeSplitProgress > 0.001f) continue;
             menuButtons[i]->Update(dt);
@@ -133,8 +129,8 @@ void ReadyScene::Render(SpriteRenderer& renderer) {
         DrawUpgradeEntryButton();
     }
 
-    // 转场遮罩（最上层）
-    TransitionMask::Get().Draw();
+    // 转场遮罩由 SceneManager 于场景绘制后统一叠加（DrawTransitionOverlay），
+    // 本场景不再认识任何具体转场
 }
 
 void ReadyScene::Reset() {
@@ -189,7 +185,7 @@ void ReadyScene::InitButtons() {
         Vec2{UITheme::MainBtnW, UITheme::MainBtnH},
         "开始游戏");
     startBtn->SetOnClick([this](){
-        if (TransitionMask::Get().IsActive() || upgradePanelOpen) return;
+        if (SceneManager::Instance().IsTransitionActive() || upgradePanelOpen) return;
         splitOpen = true;
         std::cout << "Start button split by click." << std::endl;
     });
@@ -202,7 +198,7 @@ void ReadyScene::InitButtons() {
         Vec2{UITheme::SecondaryBtnW, UITheme::SecondaryBtnH},
         "排行榜");
     rankBtn->SetOnClick([](){
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::ScoreRankScene));
+        SceneManager::Instance().RequestScene(SceneId::ScoreRank);
     });
     menuButtons.push_back(rankBtn);
 
@@ -213,7 +209,7 @@ void ReadyScene::InitButtons() {
         Vec2{UITheme::SecondaryBtnW, UITheme::SecondaryBtnH},
         "设置");
     settingsBtn->SetOnClick([](){
-        SceneManager::Instance().ChangeScene(Application::Get().GetScene(Application::Scenes::SettingsScene));
+        SceneManager::Instance().RequestScene(SceneId::Settings);
     });
     menuButtons.push_back(settingsBtn);
 
@@ -234,8 +230,7 @@ void ReadyScene::InitButtons() {
         Vec2{WIN_WIDTH - 52.f, 52.f},
         52.f);
     achievementEntry->SetOnClick([](){
-        SceneManager::Instance().ChangeScene(
-            Application::Get().GetScene(Application::Scenes::AchievementsScene));
+        SceneManager::Instance().RequestScene(SceneId::Achievements);
     });
 
     // ===== 菜单按钮登记到 UISystem（传 shared_ptr，登记即共享持有） =====
@@ -389,7 +384,7 @@ void ReadyScene::UpdateCandlelights(float dt) {
 
 void ReadyScene::UpdateModeSplit(float dt) {
     // 转场期间：冻结当前分裂状态（点击模式按钮后不回缩），不响应悬停/点击
-    if (TransitionMask::Get().IsActive()) {
+    if (SceneManager::Instance().IsTransitionActive()) {
         modeHoverIndex = -1;
         modeHoverTimer = 0.0f;
         tipFade = std::max(0.0f, tipFade - dt * 10.0f);
@@ -574,8 +569,8 @@ void ReadyScene::DrawModeTipBox() {
 }
 
 void ReadyScene::StartGameWithMode(int modeIndex) {
-    auto& mask = TransitionMask::Get();
-    if (mask.IsActive()) return; // 转场进行中不重复启动
+    auto& sm = SceneManager::Instance();
+    if (sm.IsTransitionActive()) return; // 转场进行中不重复启动
 
     // 保持分裂展开状态（转场期间冻结、不回缩；返回主菜单时由 Reset 复位为单按钮），
     // 仅清除悬停高亮与解释框
@@ -584,14 +579,16 @@ void ReadyScene::StartGameWithMode(int modeIndex) {
     tipFade = 0.0f;
     tipIndex = -1;
 
-    // 设置主场景模式后走既有的聚焦转场流程
-    auto ms = std::static_pointer_cast<MainScene>(Application::Get().GetScene(Application::Scenes::MainScene));
-    if (ms) ms->SetMode((MainScene::GameMode)modeIndex);
+    // 一行式意图：目标场景 + 对局参数 + 转场样式；路由、参数注入与转场编排全部在 SceneManager
+    SceneArgs args;
+    args.gameMode = (GameMode)modeIndex;
     std::cout << "Mode selected: " << modeIndex << ", starting transition..." << std::endl;
 
-    // 以蝙蝠当前位置为圆心聚焦（主界面蝙蝠同位同尺寸，营造"同一只蝙蝠"的连续感）
+    // 以蝙蝠当前位置为圆心聚焦（主界面蝙蝠同位同尺寸，营造"同一只蝙蝠"的连续感）；
+    // 精灵世界坐标 Y 向上，转场锚点用屏幕坐标（Y 向下），此处换算后随请求携带
     const auto& p = batSprite->GetPosition();
-    mask.StartFocus(p.x, (float)Config::GetInstance().GetScreenHeight() - p.y);
+    args.focusAnchorScreen = Vec2{ p.x, (float)Config::GetInstance().GetScreenHeight() - p.y };
+    sm.RequestScene(SceneId::Main, args, TransitionStyle::CircleFocus);
 }
 
 // ===== 护盾升级（B8）：右上角金币入口 + 升级面板 =====
