@@ -4,15 +4,15 @@
 #include "scene/RainSystem.h"
 #include "VertexArray.h"
 #include "VertexBuffer.h"
-#include "Math.h"
 
 #include <memory>
 #include <vector>
 
 class Shader;
-struct LightningBranch;
 
-// 闪电本体（动态三角带）与全屏闪光（additive）的渲染器。
+// 闪电本体(动态三角带)与全屏闪光(additive)的渲染器。
+// 刻意不走实例化路径(文档化例外):雷线网格每帧按分支重建(TRIANGLE_STRIP),
+// 闪光用空 VAO 画 3 顶点——因此不继承 InstancedQuadRenderer,直接实现 IRenderer。
 class LightningRenderer : public IRenderer
 {
 public:
@@ -21,7 +21,10 @@ public:
 
     void Init(std::shared_ptr<RainSystem> rain);
 
-    void Render(SpriteRenderer& spriteRenderer) override;
+    // 只响应 WorldSlot::Lightning;其余槽位调用为空操作
+    void Render(const RenderContext& ctx, WorldSlot slot) override;
+
+    std::vector<WorldSlot> Slots() const override { return { WorldSlot::Lightning }; }
 
 private:
     void BuildBranchMesh(const LightningBranch& branch, std::vector<float>& vertices);
@@ -35,6 +38,4 @@ private:
     VertexArray lightningVao_;
     VertexBuffer lightningVbo_;
     VertexArray flashVao_;
-
-    Mat4 lightningProjection_;
 };

@@ -11,30 +11,27 @@ void LightningRenderer::Init(std::shared_ptr<RainSystem> rain)
     lightningShader_ = ShaderLibrary::Instance().Get("lightning");
     flashShader_ = ShaderLibrary::Instance().Get("flash");
 
-    float sw = (float)Config::GetInstance().GetScreenWidth();
-    float sh = (float)Config::GetInstance().GetScreenHeight();
-    Ortho(0.0f, sw, 0.0f, sh, lightningProjection_.m);
-
     lightningVao_.Bind();
     lightningVbo_.Bind();
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3, (void*)0);
     lightningVao_.Unbind();
-    // flashVao_ 为空 VAO（core profile 绘制需要绑定一个 VAO）
+    // flashVao_ 为空 VAO(core profile 绘制需要绑定一个 VAO)
 }
 
-void LightningRenderer::Render(SpriteRenderer& spriteRenderer)
+void LightningRenderer::Render(const RenderContext& ctx, WorldSlot slot)
 {
+    if (slot != WorldSlot::Lightning) return;
     if (!rain_ || !rain_->IsLightning())
         return;
 
-    // 1. 闪电本体（additive）
+    // 1. 闪电本体(additive)
     if (lightningShader_)
     {
         BlendScope blend(BlendMode::Additive());
 
         lightningShader_->Use();
-        lightningShader_->SetMat4("uProjection", lightningProjection_.m);
+        lightningShader_->SetMat4("uProjection", ctx.projection.Data());
         lightningShader_->SetFloat("uTime", rain_->GetLightningTimeCounter());
 
         const Lightning& lightning = rain_->GetLightning();
@@ -43,7 +40,7 @@ void LightningRenderer::Render(SpriteRenderer& spriteRenderer)
             RenderBranch(b);
     }
 
-    // 2. 全屏闪光（additive）
+    // 2. 全屏闪光(additive)
     if (flashShader_ && rain_->GetLightningExposure() > 0.001f)
     {
         BlendScope blend(BlendMode::Additive());

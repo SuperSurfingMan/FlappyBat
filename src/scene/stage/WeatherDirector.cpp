@@ -2,6 +2,9 @@
 #include "../../StageParams.h"
 #include "../../Config.h"
 #include "../../SpriteRenderer.h"
+#include "../../RainRenderer.h"
+#include "../../LightningRenderer.h"
+#include "../../WindRenderer.h"
 #include "../../res/ResourceManager.h"
 #include "../../sprite/Sprite.h"
 #include "../../ui/UIBuilder.h"
@@ -82,9 +85,23 @@ void DrawDashedPolyline(ImDrawList* dl, const std::vector<ImVec2>& pts, ImU32 co
 
 void WeatherDirector::Init() {
     rainSystem = ResourceManager::Get().GetRainSystem();
-    rainRenderer.Init(rainSystem);
-    lightningRenderer.Init(rainSystem);
-    windRenderer.Init(); // 风线（阵风可视化；数据自持，仅吃 Update 的阵风状态）
+
+    // ===== 渲染器注册表（方案一）：构造即注册，槽位分发表一次建立 =====
+    auto rain = std::make_unique<RainRenderer>();
+    auto lightning = std::make_unique<LightningRenderer>();
+    auto wind = std::make_unique<WindRenderer>();
+    rain->Init(rainSystem);
+    lightning->Init(rainSystem);
+    wind->Init(); // 风线（阵风可视化；数据自持，仅吃 Update 的阵风状态）
+
+    windRenderer_ = wind.get(); // 非 owning：每帧喂阵风状态
+    renderers_.push_back(std::move(rain));
+    renderers_.push_back(std::move(lightning));
+    renderers_.push_back(std::move(wind));
+
+    for (auto& r : renderers_)
+        for (WorldSlot s : r->Slots())
+            slotOwners_[(size_t)s].push_back(r.get());
 
     // 天色变暗遮罩（A4-c）：白色纹理着色，透明度随难度档位渐变
     auto whiteTex = ResourceManager::Get().GetTexture2D("white");
@@ -127,26 +144,27 @@ void WeatherDirector::AdvanceRain(float dt) {
     if (rainSystem) rainSystem->Update(dt);
 }
 
-void WeatherDirector::UpdateWind(float dt) {
-    windRenderer.Update(gustTimer > 0.0f, gustForce, dt);
+void WeatherDirector::UpdateFx(float dt) {
+    // 阵风状态喂给风线渲染器（预警期无气流），再统一多态推进；
+    // 雨/雷逻辑数据在 RainSystem 内，由 AdvanceRain 推进，不经此处
+    windRenderer_->SetGust(gustTimer > 0.0f, gustForce);
+    for (auto& r : renderers_) r->Update(dt);
 }
 
-void WeatherDirector::RenderRain(SpriteRenderer& renderer, int depthLayer) {
-    rainRenderer.RenderDepthLayer(renderer, depthLayer);
+void WeatherDirector::RenderSlot(const RenderContext& ctx, WorldSlot slot) {
+    // 槽位分发表已按各渲染器 Slots() 声明建立：只画认领了该槽位的渲染器
+    for (IRenderer* r : slotOwners_[(size_t)slot])
+        r->Render(ctx, slot);
+
+    // 天色遮罩是普通 Sprite（非 IRenderer）：跟随 WeatherScrim 槽位叠加
+    if (slot == WorldSlot::WeatherScrim)
+        RenderScrim(ctx);
 }
 
-void WeatherDirector::RenderLightning(SpriteRenderer& renderer) {
-    lightningRenderer.Render(renderer);
-}
-
-void WeatherDirector::RenderWind(SpriteRenderer& renderer) {
-    windRenderer.Render(renderer);
-}
-
-void WeatherDirector::RenderScrim(SpriteRenderer& renderer) {
+void WeatherDirector::RenderScrim(const RenderContext& ctx) {
     if (stormScrimSprite && scrimAlpha > 0.001f) {
         stormScrimSprite->SetColor(0.05f, 0.06f, 0.13f, scrimAlpha);
-        renderer.Draw_UV(stormScrimSprite);
+        ctx.sprites.Draw_UV(stormScrimSprite);
     }
 }
 

@@ -19,7 +19,6 @@ public:
     // 画所有 sprite
     void Draw_UV(const std::vector<std::shared_ptr<Sprite>>& sprites);
     void Draw_UV(const std::shared_ptr<Sprite>& sprite);
-    void Draw_UV_Wave(const std::shared_ptr<Sprite>& sprite);
 
     void SetProjection(const float* spriteProjection);
 
@@ -30,7 +29,6 @@ private:
     VertexBuffer VBO;
 
     std::shared_ptr<Shader> shader;
-    std::shared_ptr<Shader> waveShader;
 
     void InitRenderData();
 

@@ -17,7 +17,8 @@
 #include "../layer/LayerStack.h"    // 屏幕覆盖层组合容器
 #include "stage/StageHud.h"          // 常驻 HUD 绘制（纯绘制，快照驱动）
 #include "stage/FeedbackFx.h"        // 飘字与全局抖动（纯表现）
-#include "stage/WeatherDirector.h"   // 阵风/落雷/消息盒/天色（含雨/雷/风渲染器）
+#include "stage/WeatherDirector.h"   // 阵风/落雷/消息盒/天色（IRenderer 注册表：雨/雷/风）
+#include "../WorldSlot.h"            // 世界渲染槽位（Render 的槽位管线）
 #include "stage/PlayerAbilities.h"   // 护盾/俯冲/巨化/慢动作/蝙蝠运动
 #include "stage/ObstacleField.h"    // 管道池/变体/碰撞/飞行回收
 #include "stage/ItemField.h"        // 道具池/生成/拾取/巨化星
@@ -29,6 +30,7 @@ class RainSystem;
 class MainSceneUILayer;
 class MainSceneOverLayer;
 class ToastLayer;
+struct RenderContext;
 
 class MainScene : public Scene, public IStageFeedback, public IGameInputSink {
 public:
@@ -72,7 +74,7 @@ private:
     std::shared_ptr<MainSceneUILayer> mainSceneUILayer;
     std::shared_ptr<MainSceneOverLayer> mainSceneOverLayer;
     // 屏幕覆盖层：插入顺序即更新顺序（Toast -> UI -> 结算）；
-    // 世界渲染（雨/闪电/风/怪物）仍由 Render 显式排序，不进入此栈
+    // 世界渲染（雨/闪电/风/怪物）由 Render 的 WorldSlot 槽位管线排序，不进入此栈
     LayerStack overlayLayers;
 
     // ===== 局内 HUD 交互控件 =====
@@ -92,6 +94,9 @@ private:
     void SetHudInteractive(bool interactive);
 
     void DrawImGUILayout();
+    // 槽位管线（方案二）：场景自有内容的槽位填充（贴图组与玩法子系统）；
+    // 天气渲染器认领的槽位已在 WeatherDirector::RenderSlot 内处理
+    void DrawWorldSlot(const RenderContext& ctx, WorldSlot slot);
     // HUD 快照：把玩法状态拍平成只读视图，绘制类不反向读场景字段
     StageHud::Snapshot BuildHudSnapshot() const;
     // 子系统帧快照：怪物规则在此摊平为布尔/数值，子系统不认识 EnemyDirector
@@ -143,7 +148,7 @@ private:
     void TriggerSlowMo(float dur) override;  // 击杀慢动作（整帧时间缩放，线性缓升恢复）
 
     // ===== 全局抖动（撞飞反馈，C12 子集） =====
-    // 通过平移 SpriteRenderer 投影实现：所有世界 Sprite 跟随震动，ImGui UI 不受影响
+    // 通过平移投影实现（SpriteRenderer 与 RenderContext 同源）：所有世界渲染跟随震动，ImGui UI 不受影响
     void TriggerShake(float intensity);
 
     // ===== 成就（B7） =====

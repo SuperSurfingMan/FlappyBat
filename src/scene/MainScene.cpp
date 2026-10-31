@@ -1,4 +1,6 @@
 #include "MainScene.h"
+#include "../WorldSlot.h"
+#include "../RenderContext.h"
 #include "../app/Application.h"
 
 #include "../sprite/Sprite.h"
@@ -236,7 +238,7 @@ void MainScene::Update(float dt)
     }
     // 输入意图（由 UISystem 推送的本帧快照）：俯冲（S/↓）由玩家子系统读取
     weather.UpdateGust(dt, frame, params()); // 阵风（A4-b）：只算推力，由玩家子系统在积分前施加
-    weather.UpdateWind(dt); // 风线可视化（仅生效期显示；预警期无气流）
+    weather.UpdateFx(dt); // 风线可视化（仅生效期显示；预警期无气流）
     player.Update(dt, frame, weather.GustForce()); // 蝙蝠运动 + 俯冲 + 护盾/能量计时
     UpdateTimeRush(dt);   // 限时冲刺倒计时（B9）
     // 地面滚动/水花漂移速度与障碍物同步（难度递进后不再恒为 200）
@@ -313,42 +315,36 @@ void MainScene::Update(float dt)
 
 void MainScene::Render(SpriteRenderer& renderer)
 {
-    // ===== 全局抖动（B6-b 反馈）：平移投影使所有世界 Sprite 震动（ImGui UI 不受影响） =====
+    // ===== 全局抖动（B6-b 反馈）：平移投影使所有世界渲染跟随震动（ImGui UI 不受影响） =====
+    // 抖动投影同源分发给 SpriteRenderer（普通精灵）与 RenderContext（雨/风/闪电），
+    // 世界内所有元素一致震动；无抖动时渲染器取标准正交投影
     const float SW = (float)Config::GetInstance().GetScreenWidth();
     const float SH = (float)Config::GetInstance().GetScreenHeight();
     float offX = 0.0f, offY = 0.0f;
     const bool shaking = fx.ShakeOffset(offX, offY);
-    if (shaking) {
-        float proj[16];
-        Ortho(offX, SW + offX, offY, SH + offY, proj);
-        renderer.SetProjection(proj);
-    }
 
-    // ===== 雨：按深度分四层穿插场景（远景淡而慢、近景实而快，营造纵深） =====
-    weather.RenderRain(renderer, 0); // 层0 最底层：垫在背景之下
-    renderer.Draw_UV(backgroundSprites);
-    weather.RenderRain(renderer, 1); // 层1 第一层远景：背景与前景之间
-    renderer.Draw_UV(foregroundSprites);
-    renderer.Draw_UV(terrainSprites);
-    weather.RenderRain(renderer, 2); // 层2 第二层远景：地面之上、障碍之下（含贴地水花）
-    if (isObstacleVisible) obstacles.Render(renderer); // 障碍物可见时才渲染
-    items.Render(renderer);                            // 道具 + 巨化星
-    // 怪物世界层（枭王：血月/本体/羽刃/水晶/音爆）——道具之后、风线之前（导演固定槽位）
-    enemies.RenderWorld(renderer);
-    // 风线（A4-b 补充）：插在道具与蝙蝠之间——气流贴玩法平面流动，
-    // 蝙蝠保持清晰；粗实卷曲蓝线与近景雨层（层3，蝙蝠之后再画）形状迥异不混淆
-    weather.RenderWind(renderer);
-    renderer.Draw_UV(bat);
-    // 天色变暗遮罩（A4-c）：覆盖世界元素，位于雨/闪电与 UI 之下
-    weather.RenderScrim(renderer);
-    weather.RenderRain(renderer, 3); // 层3 近景：障碍与蝙蝠之前（最实）
-    weather.RenderLightning(renderer);
+    Mat4 projection{};
+    Ortho(0.0f, SW, 0.0f, SH, projection.m);
+    if (shaking) {
+        Ortho(offX, SW + offX, offY, SH + offY, projection.m);
+        renderer.SetProjection(projection.m);
+    }
+    RenderContext ctx{ renderer, projection };
+
+    // ===== 世界渲染槽位管线（方案二）：WorldSlot 枚举顺序即绘制顺序 =====
+    // 场景自有内容与天气渲染器在同一张槽位表里排位；雨的 4 档深度穿插
+    // （远景淡而慢、近景实而快，营造纵深）由渲染器的槽位声明表达，
+    // 不再依赖手写调用序列。新增渲染器只需注册并声明槽位，本函数零改动。
+    for (int i = 0; i < (int)WorldSlot::Count; ++i) {
+        const WorldSlot slot = (WorldSlot)i;
+        weather.RenderSlot(ctx, slot); // 天气渲染器：只画认领的槽位（含天色遮罩）
+        DrawWorldSlot(ctx, slot);      // 场景自有内容：贴图组与玩法子系统
+    }
 
     // 恢复未抖动的投影（其它场景共用同一渲染器）
     if (shaking) {
-        float proj[16];
-        Ortho(0.0f, SW, 0.0f, SH, proj);
-        renderer.SetProjection(proj);
+        Ortho(0.0f, SW, 0.0f, SH, projection.m);
+        renderer.SetProjection(projection.m);
     }
 
     // 覆盖层按阶段插入：Toast 在场景 HUD 之前，UI/结算在之后。
@@ -360,6 +356,22 @@ void MainScene::Render(SpriteRenderer& renderer)
     if (overlayLayers.IsAttached()) {
         mainSceneUILayer->SetRenderEnabled(!flow.IsGameOver());
         overlayLayers.Draw(renderer, LayerRenderPhase::AfterHud);
+    }
+}
+
+// 场景自有内容的槽位填充：天气渲染器不认领的槽位在此绘制；
+// 双方都不认领的槽位自然跳过。槽位到内容的映射即渲染层级的文档。
+void MainScene::DrawWorldSlot(const RenderContext& ctx, WorldSlot slot)
+{
+    switch (slot) {
+        case WorldSlot::Background: ctx.sprites.Draw_UV(backgroundSprites); break;
+        case WorldSlot::Foreground: ctx.sprites.Draw_UV(foregroundSprites); break;
+        case WorldSlot::Terrain:    ctx.sprites.Draw_UV(terrainSprites);    break;
+        case WorldSlot::Obstacles:  if (isObstacleVisible) obstacles.Render(ctx.sprites); break; // 障碍物可见时才渲染
+        case WorldSlot::Items:      items.Render(ctx.sprites);            break; // 道具 + 巨化星
+        case WorldSlot::Enemies:    enemies.RenderWorld(ctx.sprites);     break; // 怪物世界层（枭王：血月/本体/羽刃/水晶/音爆）
+        case WorldSlot::Player:     ctx.sprites.Draw_UV(bat);             break; // 蝙蝠（风线之后：气流贴玩法平面，蝙蝠保持清晰）
+        default: break; // 其余槽位由天气渲染器认领（雨带0~3/风线/天色遮罩/闪电）
     }
 }
 

@@ -1,6 +1,5 @@
 #include "SpriteRenderer.h"
 #include "ShaderLibrary.h"
-#include "sprite/ColorfulSprite.h"
 
 #include <glad/glad.h>
 #include <iostream>
@@ -22,12 +21,6 @@ SpriteRenderer::SpriteRenderer()
         "sprite",
         "assets/shaders/sprite.vert",
         "assets/shaders/sprite.frag"
-    );
-
-    waveShader = ShaderLibrary::Instance().Load(
-        "sprite_wave",
-        "assets/shaders/sprite_wave.vert",
-        "assets/shaders/sprite_wave.frag"
     );
 
     InitRenderData();
@@ -114,47 +107,6 @@ void SpriteRenderer::Draw_UV(const std::shared_ptr<Sprite>& sprite)
     // 新增：FrameUV
     FrameUV uv = sprite->GetFrameUV();
     shader->SetVec4("uFrameUV",
-        uv.uvMin.x,
-        uv.uvMin.y,
-        uv.uvMax.x,
-        uv.uvMax.y);
-
-    sprite->GetTexture()->Bind(0);
-
-    VAO.Bind();
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-}
-
-void SpriteRenderer::Draw_UV_Wave(const std::shared_ptr<Sprite>& sprite)
-{
-    if (!sprite->GetTexture() || !sprite->getActive()) return;
-
-    Begin(waveShader.get(), spriteProjection);
-
-    float model[16];
-    sprite->GetTransform(model);
-
-    waveShader->SetMat4("uModel", model);
-    waveShader->SetInt("uTexture", 0);
-
-    const float* color = sprite->GetColor();
-    waveShader->SetVec4("uColor", color[0], color[1], color[2], color[3]);
-
-    // 归一化时间：用于周期控制
-    auto colorfulSprite = std::static_pointer_cast<ColorfulSprite>(sprite);
-    waveShader->SetFloat("uTime01", colorfulSprite->GetProgress());
-
-    // 效果参数，可按需要调
-    waveShader->SetFloat("uWaveScale", 3.0f);
-    waveShader->SetFloat("uWaveSpeed", 1.0f);
-    waveShader->SetFloat("uHueStrength", 0.12f);
-    waveShader->SetFloat("uMixStrength", 1.f);
-    waveShader->SetFloat("uBrightness", 4.0f);
-    waveShader->SetFloat("uWaveSharpness", 1.0f);
-
-    // FrameUV：如果你在做图集裁剪，这个仍然要传
-    FrameUV uv = sprite->GetFrameUV();
-    waveShader->SetVec4("uFrameUV",
         uv.uvMin.x,
         uv.uvMin.y,
         uv.uvMax.x,

@@ -1,14 +1,19 @@
 #pragma once
 #include "StageFrame.h"
 #include "../RainSystem.h"
-#include "../../RainRenderer.h"
-#include "../../LightningRenderer.h"
-#include "../../WindRenderer.h"
+#include "../../IRenderer.h"
+#include "../../WorldSlot.h"
+#include "../../RenderContext.h"
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
 
 struct ModeParams;
+class RainRenderer;
+class LightningRenderer;
+class WindRenderer;
+class Sprite;
 
 // 天气事件消息盒的固定槽位；怪物槽位自 IEnemy.h 的 kEnemyWeatherMsgSlotBase 起按 EnemyId 分段
 enum WeatherMsgSlot { WMsgGust = 0, WMsgLightning = 1, WMsgStorm = 2 };
@@ -19,11 +24,12 @@ enum WeatherMsgSlot { WMsgGust = 0, WMsgLightning = 1, WMsgStorm = 2 };
 // 边界：
 //   - 只读 StageFrame 与 ModeParams，不持有蝙蝠、不读场景字段；
 //   - 阵风只计算推力向量（GustForce），由玩家子系统负责施加到蝙蝠速度；
-//   - 雨/雷/风三个渲染器随天气数据一起下沉，场景只按世界深度槽位调用。
+//   - 雨/雷/风渲染器随天气数据一起下沉：以 IRenderer 注册表持有（方案一），
+//     场景只经 RenderSlot 按 WorldSlot 槽位调用（方案二），不接触具体渲染器类型。
 // =============================================================================
 class WeatherDirector {
 public:
-    void Init();                                  // 取 RainSystem 并初始化三个渲染器
+    void Init();                                  // 取 RainSystem 并初始化三个渲染器、建槽位分发表
     void Reset();                                 // 新一局：消息盒/阵风/遮罩归零
     void OnEnter(float lightningWarnLead);        // 进入场景：设置预警提前量
 
@@ -39,13 +45,16 @@ public:
     void ApplyForTier(int tier, const ModeParams& p);
 
     void SetRainScrollSpeed(float v);
-    void AdvanceRain(float dt);
-    void UpdateWind(float dt); // 风线可视化（仅气流生效期显示；预警期无气流）
+    void AdvanceRain(float dt); // 雨/雷逻辑数据在 RainSystem 内推进，渲染器不参与
 
-    void RenderRain(SpriteRenderer& renderer, int depthLayer);
-    void RenderLightning(SpriteRenderer& renderer);
-    void RenderWind(SpriteRenderer& renderer);
-    void RenderScrim(SpriteRenderer& renderer); // 天色变暗遮罩（透明度过低时为空操作）
+    // 统一推进天气渲染器（方案一注册表）：先把阵风状态喂给风线渲染器，
+    // 再经 IRenderer 注册表多态 Update（雨/雷渲染器为空实现）
+    void UpdateFx(float dt);
+
+    // 槽位渲染入口（方案二）：只画认领了该槽位的天气渲染器；
+    // WeatherScrim 槽位额外叠加天色遮罩（普通 Sprite），其余槽位为空操作
+    void RenderSlot(const RenderContext& ctx, WorldSlot slot);
+
     void DrawMsgBox();
     void DrawLightningWarning(float pulseClock);
     bool CheckStrikeHit(Vec2 batPos) const;
@@ -60,6 +69,8 @@ public:
     bool IsGustWarning() const { return gustWarnTimer > 0.0f; }
 
 private:
+    void RenderScrim(const RenderContext& ctx); // 天色变暗遮罩（透明度过低时为空操作）
+
     struct Msg {
         int id = 0;
         std::string text;
@@ -92,9 +103,11 @@ private:
     float scrimTargetAlpha = 0.0f;
     float rainBaseline = 0.70f;
 
-    // ===== 雨/雷/风 =====
+    // ===== 雨/雷/风（方案一：渲染器注册表 + 槽位分发表）=====
     std::shared_ptr<RainSystem> rainSystem;
-    RainRenderer rainRenderer;
-    LightningRenderer lightningRenderer;
-    WindRenderer windRenderer;
+    std::vector<std::unique_ptr<IRenderer>> renderers_;
+    // 槽位分发表：Init 时按各渲染器 Slots() 声明建立，渲染期零扫描
+    std::array<std::vector<IRenderer*>, (size_t)WorldSlot::Count> slotOwners_;
+    // 非 owning：指向注册表内的风线渲染器，每帧喂阵风状态用
+    WindRenderer* windRenderer_ = nullptr;
 };
