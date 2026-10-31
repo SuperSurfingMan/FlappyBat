@@ -1,6 +1,6 @@
 #pragma once
-#include "../Math.h"
-#include "../app/Achievements.h"
+#include "core/Math.h"
+#include "app/Achievements.h"
 #include <string>
 
 // =============================================================================

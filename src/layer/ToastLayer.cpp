@@ -1,6 +1,6 @@
-#include "ToastLayer.h"
-#include "../font/FontManager.h"
-#include "../Texture2D.h"
+#include "layer/ToastLayer.h"
+#include "ui/FontManager.h"
+#include "render/Texture2D.h"
 #include "imgui.h"
 #include <cfloat>
 

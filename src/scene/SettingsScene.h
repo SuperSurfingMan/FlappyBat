@@ -1,7 +1,7 @@
 #pragma once
-#include "Scene.h"
-#include "../ui/UIWidget.h"   // 音量滑条热区控件需完整类型
-#include "../ui/InputScope.h" // 设置页控件组（非模态）
+#include "scene/Scene.h"
+#include "ui/UIWidget.h"   // 音量滑条热区控件需完整类型
+#include "ui/InputScope.h" // 设置页控件组（非模态）
 #include <memory>
 
 class Sprite;

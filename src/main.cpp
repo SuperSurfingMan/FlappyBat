@@ -1,7 +1,7 @@
 #include "app/Application.h"
 #include "scene/SceneManager.h"
-#include "SpriteRenderer.h"
-#include "Config.h"
+#include "render/SpriteRenderer.h"
+#include "core/Config.h"
 
 int main()
 {

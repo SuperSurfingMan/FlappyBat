@@ -1,11 +1,11 @@
 #pragma once
-#include "Sprite.h"
+#include "sprite/Sprite.h"
 #include <functional>
 #include <string>
 #include <vector>
 
-#include "../ui/UIBuilder.h"
-#include "../ui/UIWidget.h"
+#include "ui/UIBuilder.h"
+#include "ui/UIWidget.h"
 
 // ===== 按钮控件（被动式） =====
 // 交互不再由本控件轮询鼠标：命中区域判定、悬停/按下/点击的归属全部交给 UISystem，

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../Texture2D.h"
-#include "../Animation.h"
-#include "../Math.h"
+#include "render/Texture2D.h"
+#include "render/Animation.h"
+#include "core/Math.h"
 
 class Sprite {
 public:

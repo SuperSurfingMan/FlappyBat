@@ -1,4 +1,4 @@
-#include "Sprite.h"
+#include "sprite/Sprite.h"
 
 class ColorfulSprite : public Sprite {
 public:

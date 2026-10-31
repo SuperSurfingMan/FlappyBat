@@ -1,5 +1,5 @@
 #pragma once
-#include "IEnemy.h"
+#include "enemy/IEnemy.h"
 #include <memory>
 #include <vector>
 

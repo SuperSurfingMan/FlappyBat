@@ -8,7 +8,7 @@
 //   - 编排（何时换景、绘制次序、交互闸门、跨场景续态）由 SceneManager 统一负责；
 //   - 场景对转场完全无感知，只经 SceneManager 查询"是否处于全屏接管状态"。
 // =============================================================================
-#include "../Point2D.h"
+#include "core/Point2D.h"
 
 // 转场样式：RequestScene 按样式经工厂取得实现（None = 同帧直切，无转场对象）
 enum class TransitionStyle {

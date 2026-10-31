@@ -1,35 +1,35 @@
-#include "MainScene.h"
-#include "../WorldSlot.h"
-#include "../RenderContext.h"
-#include "../app/Application.h"
+#include "scene/MainScene.h"
+#include "render/WorldSlot.h"
+#include "render/RenderContext.h"
+#include "app/Application.h"
 
-#include "../sprite/Sprite.h"
-#include "../sprite/BatSprite.h"
-#include "../sprite/CollectableSprite.h"
+#include "sprite/Sprite.h"
+#include "sprite/BatSprite.h"
+#include "sprite/CollectableSprite.h"
 
-#include "../Config.h"
+#include "core/Config.h"
 
-#include "../res/ResourceManager.h"
-#include "../audio/AudioSystem.h"
+#include "res/ResourceManager.h"
+#include "audio/AudioSystem.h"
 #include <GLFW/glfw3.h>   // 仅取 GLFW_KEY_* / GLFW_MOUSE_BUTTON_* 常量（输入由 UISystem 推送）
 #include "imgui.h"
-#include "SceneManager.h"
-#include "ReadyScene.h"
+#include "scene/SceneManager.h"
+#include "scene/ReadyScene.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <iostream>
 
-#include "../layer/MainSceneUILayer.h"
-#include "../layer/MainSceneOverLayer.h"
-#include "../layer/ToastLayer.h"
-#include "../font/FontManager.h"
-#include "../app/ScoreRank.h"
-#include "../app/Achievements.h"
-#include "../app/PlayerProfile.h"
-#include "../ui/UIBuilder.h"
-#include "../ui/UITheme.h"
-#include "../ui/UISystem.h"
+#include "layer/MainSceneUILayer.h"
+#include "layer/MainSceneOverLayer.h"
+#include "layer/ToastLayer.h"
+#include "ui/FontManager.h"
+#include "app/ScoreRank.h"
+#include "app/Achievements.h"
+#include "app/PlayerProfile.h"
+#include "ui/UIBuilder.h"
+#include "ui/UITheme.h"
+#include "ui/UISystem.h"
 
 namespace {
 // 局内 HUD 交互组层叠：低于暂停面板(40)/结算面板(50)，与顶部图标排(10) 同时参与命中

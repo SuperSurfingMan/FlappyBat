@@ -1,30 +1,30 @@
 #pragma once
-#include "Scene.h"
+#include "scene/Scene.h"
 #include <algorithm>
 #include <memory>
 #include <vector>
 #include <string>
 #include <array>
 
-#include "RainSystem.h"
-#include "../Point2D.h"
-#include "../Config.h"
-#include "../GameMode.h"
-#include "../StageParams.h"        // 模式参数表（与天气子系统共用的事实源）
-#include "../ui/UIWidget.h"          // 局内 HUD 热区控件（能量图标）需完整类型
-#include "../ui/GameInput.h"        // 玩法输入快照与接收接口（蝙蝠操控由 UISystem 推送）
-#include "../ui/InputScope.h"       // 能量图标组的启用/禁用（与模态约束一致）
-#include "../layer/LayerStack.h"    // 屏幕覆盖层组合容器
-#include "stage/StageHud.h"          // 常驻 HUD 绘制（纯绘制，快照驱动）
-#include "stage/FeedbackFx.h"        // 飘字与全局抖动（纯表现）
-#include "stage/WeatherDirector.h"   // 阵风/落雷/消息盒/天色（IRenderer 注册表：雨/雷/风）
-#include "../WorldSlot.h"            // 世界渲染槽位（Render 的槽位管线）
-#include "stage/PlayerAbilities.h"   // 护盾/俯冲/巨化/慢动作/蝙蝠运动
-#include "stage/ObstacleField.h"    // 管道池/变体/碰撞/飞行回收
-#include "stage/ItemField.h"        // 道具池/生成/拾取/巨化星
-#include "stage/RunFlow.h"          // 模式/分数/连击/限时/入场/门控
-#include "../enemy/EnemyDirector.h"     // 怪物框架（含 IEnemy/EncounterRules 契约）
-#include "../enemy/IStageFeedback.h"    // MainScene 实现表现服务接口（需完整类型）
+#include "scene/stage/RainSystem.h"
+#include "core/Point2D.h"
+#include "core/Config.h"
+#include "gameplay/GameMode.h"
+#include "gameplay/StageParams.h"        // 模式参数表（与天气子系统共用的事实源）
+#include "ui/UIWidget.h"          // 局内 HUD 热区控件（能量图标）需完整类型
+#include "ui/GameInput.h"        // 玩法输入快照与接收接口（蝙蝠操控由 UISystem 推送）
+#include "ui/InputScope.h"       // 能量图标组的启用/禁用（与模态约束一致）
+#include "layer/LayerStack.h"    // 屏幕覆盖层组合容器
+#include "scene/stage/StageHud.h"          // 常驻 HUD 绘制（纯绘制，快照驱动）
+#include "scene/stage/FeedbackFx.h"        // 飘字与全局抖动（纯表现）
+#include "scene/stage/WeatherDirector.h"   // 阵风/落雷/消息盒/天色（IRenderer 注册表：雨/雷/风）
+#include "render/WorldSlot.h"            // 世界渲染槽位（Render 的槽位管线）
+#include "scene/stage/PlayerAbilities.h"   // 护盾/俯冲/巨化/慢动作/蝙蝠运动
+#include "scene/stage/ObstacleField.h"    // 管道池/变体/碰撞/飞行回收
+#include "scene/stage/ItemField.h"        // 道具池/生成/拾取/巨化星
+#include "scene/stage/RunFlow.h"          // 模式/分数/连击/限时/入场/门控
+#include "enemy/EnemyDirector.h"     // 怪物框架（含 IEnemy/EncounterRules 契约）
+#include "enemy/IStageFeedback.h"    // MainScene 实现表现服务接口（需完整类型）
 
 class RainSystem;
 class MainSceneUILayer;

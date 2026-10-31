@@ -7,9 +7,9 @@
 // 揭示：孔径弹性扩张至全开（ease-out back：爆发过冲后回弹，与聚焦刻意不对称）
 // 绘制走 ImGui 前景层：孔外纯黑环形三角扇 + 孔缘琥珀光环
 // =============================================================================
-#include "ISceneTransition.h"
+#include "scene/ISceneTransition.h"
 #include "imgui.h"
-#include "../ui/UITheme.h"
+#include "ui/UITheme.h"
 #include <cmath>
 #include <algorithm>
 

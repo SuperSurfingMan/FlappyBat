@@ -13,7 +13,7 @@
 // 键位到动作的语义解释仍留在场景里，推送的是状态而非结论。
 // =============================================================================
 #include <vector>
-#include "../Math.h"
+#include "core/Math.h"
 
 class GameInputFrame {
 public:

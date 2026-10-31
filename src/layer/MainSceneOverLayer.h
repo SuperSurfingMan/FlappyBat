@@ -1,7 +1,7 @@
 #pragma once
-#include "Layer.h"
-#include "../timer/Timer.h"
-#include "../ui/InputScope.h"
+#include "layer/Layer.h"
+#include "core/Timer.h"
+#include "ui/InputScope.h"
 #include <functional>
 #include <memory>
 

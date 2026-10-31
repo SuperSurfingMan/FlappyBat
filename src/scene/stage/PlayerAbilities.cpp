@@ -1,10 +1,10 @@
-#include "PlayerAbilities.h"
-#include "../../Config.h"
-#include "../../sprite/BatSprite.h"
-#include "../../audio/AudioSystem.h"
-#include "../../app/PlayerProfile.h"
-#include "../../enemy/IStageFeedback.h"
-#include "../../ui/UITheme.h"
+#include "scene/stage/PlayerAbilities.h"
+#include "core/Config.h"
+#include "sprite/BatSprite.h"
+#include "audio/AudioSystem.h"
+#include "app/PlayerProfile.h"
+#include "enemy/IStageFeedback.h"
+#include "ui/UITheme.h"
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <cmath>

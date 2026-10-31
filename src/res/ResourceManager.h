@@ -8,8 +8,8 @@
 #include<thread>
 #include<mutex>
 #include<atomic>
-#include "../Point2D.h"
-#include "../Texture2D.h"
+#include "core/Point2D.h"
+#include "render/Texture2D.h"
 
 class RainSystem;
 class Sprite;

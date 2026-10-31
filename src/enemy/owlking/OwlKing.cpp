@@ -1,14 +1,14 @@
-#include "OwlKing.h"
-#include "../../sprite/Sprite.h"
-#include "../../Texture2D.h"
-#include "../../SpriteRenderer.h"
-#include "../../res/ResourceManager.h"
-#include "../../Config.h"
-#include "../../audio/AudioSystem.h"
-#include "../../scene/RainSystem.h" // B5 雷暴召唤：TriggerStrikeAt 需完整类型
-#include "../IStageFeedback.h"
-#include "../../ui/UIBuilder.h"
-#include "../../ui/UITheme.h"
+#include "enemy/owlking/OwlKing.h"
+#include "sprite/Sprite.h"
+#include "render/Texture2D.h"
+#include "render/SpriteRenderer.h"
+#include "res/ResourceManager.h"
+#include "core/Config.h"
+#include "audio/AudioSystem.h"
+#include "scene/stage/RainSystem.h" // B5 雷暴召唤：TriggerStrikeAt 需完整类型
+#include "enemy/IStageFeedback.h"
+#include "ui/UIBuilder.h"
+#include "ui/UITheme.h"
 #include "imgui.h"
 
 #include <algorithm>

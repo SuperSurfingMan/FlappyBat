@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Math.h"
-#include "../../ui/GameInput.h"
+#include "core/Math.h"
+#include "ui/GameInput.h"
 
 // =============================================================================
 // 局内子系统的只读帧快照（MainScene 每帧填充一次）。

@@ -1,7 +1,7 @@
-#include "FeedbackFx.h"
-#include "../../Config.h"
-#include "../../ui/UIBuilder.h"
-#include "../../ui/UITheme.h"
+#include "scene/stage/FeedbackFx.h"
+#include "core/Config.h"
+#include "ui/UIBuilder.h"
+#include "ui/UITheme.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cmath>

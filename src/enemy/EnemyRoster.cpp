@@ -1,5 +1,5 @@
-#include "EnemyDirector.h"
-#include "owlking/OwlKing.h"
+#include "enemy/EnemyDirector.h"
+#include "enemy/owlking/OwlKing.h"
 
 // =============================================================================
 // 内置怪物登记表（docs/怪物系统架构设计.md §9 操作手册）：

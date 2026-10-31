@@ -1,8 +1,8 @@
-#include "BatSprite.h"
-#include "../Input.h"
-#include "../Config.h"
-#include "../audio/AudioSystem.h"
-#include "../res/ResourceManager.h"
+#include "sprite/BatSprite.h"
+#include "core/Input.h"
+#include "core/Config.h"
+#include "audio/AudioSystem.h"
+#include "res/ResourceManager.h"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>

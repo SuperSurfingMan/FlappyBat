@@ -1,7 +1,7 @@
-#include "UISystem.h"
+#include "ui/UISystem.h"
 
-#include "../Input.h"
-#include "../audio/AudioSystem.h"
+#include "core/Input.h"
+#include "audio/AudioSystem.h"
 
 #include <imgui.h>
 #include <algorithm>

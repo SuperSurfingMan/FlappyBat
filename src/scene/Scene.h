@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../SpriteRenderer.h"
-#include "SceneArgs.h"
+#include "render/SpriteRenderer.h"
+#include "scene/SceneArgs.h"
 
 class Scene {
 public:

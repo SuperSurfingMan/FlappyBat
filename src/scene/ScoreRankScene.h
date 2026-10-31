@@ -1,8 +1,8 @@
 #pragma once
-#include "Scene.h"
-#include "../app/ScoreRank.h"
-#include "../ui/UIWidget.h"   // 页签/滚动条/遮罩等内联热区控件需完整类型
-#include "../ui/InputScope.h"   // 主榜单组（非模态）+ 清空确认弹窗（模态）
+#include "scene/Scene.h"
+#include "app/ScoreRank.h"
+#include "ui/UIWidget.h"   // 页签/滚动条/遮罩等内联热区控件需完整类型
+#include "ui/InputScope.h"   // 主榜单组（非模态）+ 清空确认弹窗（模态）
 #include <string>
 #include <vector>
 #include <memory>

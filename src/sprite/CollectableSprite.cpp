@@ -1,7 +1,7 @@
-#include "CollectableSprite.h"
-#include "../Animation.h"
-#include "../res/ResourceManager.h"
-#include "../audio/AudioSystem.h"
+#include "sprite/CollectableSprite.h"
+#include "render/Animation.h"
+#include "res/ResourceManager.h"
+#include "audio/AudioSystem.h"
 #include <iostream>
 
 void CollectableSprite::SetCallback(std::function<void()>&& cb) {

@@ -1,4 +1,4 @@
-#include "Sprite.h"
+#include "sprite/Sprite.h"
 #include "iostream"
 
 Sprite::Sprite() = default;

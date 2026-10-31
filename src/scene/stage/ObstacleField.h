@@ -1,7 +1,7 @@
 #pragma once
-#include "StageFrame.h"
-#include "../../Math.h"
-#include "../../Point2D.h"
+#include "scene/stage/StageFrame.h"
+#include "core/Math.h"
+#include "core/Point2D.h"
 #include <array>
 #include <functional>
 #include <memory>

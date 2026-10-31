@@ -1,6 +1,6 @@
 #pragma once
-#include "../../GameMode.h"
-#include "../../StageParams.h"
+#include "gameplay/GameMode.h"
+#include "gameplay/StageParams.h"
 #include <cstddef>
 
 // =============================================================================

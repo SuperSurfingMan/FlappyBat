@@ -1,9 +1,9 @@
 #pragma once
-#include "StageFrame.h"
-#include "../RainSystem.h"
-#include "../../IRenderer.h"
-#include "../../WorldSlot.h"
-#include "../../RenderContext.h"
+#include "scene/stage/StageFrame.h"
+#include "scene/stage/RainSystem.h"
+#include "render/IRenderer.h"
+#include "render/WorldSlot.h"
+#include "render/RenderContext.h"
 #include <array>
 #include <memory>
 #include <string>

@@ -1,5 +1,5 @@
 #pragma once
-#include "../SpriteRenderer.h"
+#include "render/SpriteRenderer.h"
 
 // 屏幕覆盖层的渲染阶段：世界与场景 HUD 的绘制顺序由 Scene 显式控制，
 // 层只按阶段插入，避免把雨的深度分层等世界渲染强行塞进 LayerStack。

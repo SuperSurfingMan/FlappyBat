@@ -1,6 +1,6 @@
 #pragma once
-#include "StageFrame.h"
-#include "../../Math.h"
+#include "scene/stage/StageFrame.h"
+#include "core/Math.h"
 #include <memory>
 
 class BatSprite;

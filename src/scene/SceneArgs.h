@@ -3,8 +3,8 @@
 // 切场启动参数包：场景只声明意图（SceneId + SceneArgs），不再 include 目标场景
 // 头文件、更不再 static_pointer_cast 下转设参。字段按需增补，非目标场景自行忽略。
 // =============================================================================
-#include "../GameMode.h"
-#include "../Point2D.h"
+#include "gameplay/GameMode.h"
+#include "core/Point2D.h"
 #include <optional>
 
 struct SceneArgs {

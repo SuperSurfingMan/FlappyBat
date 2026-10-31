@@ -1,6 +1,6 @@
 #pragma once
-#include "Sprite.h"
-#include "../timer/Timer.h"
+#include "sprite/Sprite.h"
+#include "core/Timer.h"
 
 enum class BatState {
     Flying,

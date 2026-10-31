@@ -1,6 +1,6 @@
 #pragma once
-#include "Layer.h"
-#include "../Math.h"
+#include "layer/Layer.h"
+#include "core/Math.h"
 #include <string>
 #include <memory>
 

@@ -1,8 +1,8 @@
 #pragma once
-#include "Scene.h"
-#include "../ui/UIWidget.h"   // 内联热区控件（分裂行/模式按钮/升级面板）需完整类型
-#include "../ui/GameInput.h"  // 作为 IGameInputSink 订阅推送式输入（ESC 关面板）
-#include "../ui/InputScope.h" // 主菜单组（非模态）+ 升级面板（模态）
+#include "scene/Scene.h"
+#include "ui/UIWidget.h"   // 内联热区控件（分裂行/模式按钮/升级面板）需完整类型
+#include "ui/GameInput.h"  // 作为 IGameInputSink 订阅推送式输入（ESC 关面板）
+#include "ui/InputScope.h" // 主菜单组（非模态）+ 升级面板（模态）
 #include <vector>
 #include <memory>
 

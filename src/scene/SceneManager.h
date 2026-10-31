@@ -1,8 +1,8 @@
 #pragma once
-#include "Scene.h"
-#include "SceneId.h"
-#include "SceneArgs.h"
-#include "ISceneTransition.h"
+#include "scene/Scene.h"
+#include "scene/SceneId.h"
+#include "scene/SceneArgs.h"
+#include "scene/ISceneTransition.h"
 #include <map>
 #include <memory>
 

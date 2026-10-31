@@ -1,9 +1,9 @@
-#include "../sprite/FadeSprite.h"
-#include "../SpriteRenderer.h"
-#include "BootScene.h"
-#include "SceneManager.h"
-#include "../Config.h"
-#include "../res/ResourceManager.h"
+#include "sprite/FadeSprite.h"
+#include "render/SpriteRenderer.h"
+#include "scene/BootScene.h"
+#include "scene/SceneManager.h"
+#include "core/Config.h"
+#include "res/ResourceManager.h"
 
 BootScene::BootScene() {
     // 直接复用 ResourceManager 预载的纹理（Init 阶段已同步加载），避免重复解码

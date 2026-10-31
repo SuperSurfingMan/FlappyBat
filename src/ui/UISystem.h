@@ -26,8 +26,8 @@
 //   不回看组是否启用，与 IsWidgetLive 同一套判据；若压了栈却关掉组，本帧将没有任何
 //   控件认领鼠标（下层组已被模态判为失活），表现为整块 UI 无响应而非命中抖动。
 // =============================================================================
-#include "UIWidget.h"
-#include "GameInput.h"
+#include "ui/UIWidget.h"
+#include "ui/GameInput.h"
 #include <memory>
 #include <vector>
 

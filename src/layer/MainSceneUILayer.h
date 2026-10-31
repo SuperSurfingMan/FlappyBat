@@ -1,7 +1,7 @@
 #pragma once
-#include "Layer.h"
-#include "../ui/GameInput.h"
-#include "../ui/InputScope.h"
+#include "layer/Layer.h"
+#include "ui/GameInput.h"
+#include "ui/InputScope.h"
 #include <memory>
 #include <functional>
 

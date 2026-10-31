@@ -1,13 +1,13 @@
-#include "ResourceManager.h"
+#include "res/ResourceManager.h"
 
-#include "../sprite/Sprite.h"
-#include "../sprite/BatSprite.h"
-#include "../sprite/CollectableSprite.h"
+#include "sprite/Sprite.h"
+#include "sprite/BatSprite.h"
+#include "sprite/CollectableSprite.h"
 
-#include "../scene/RainSystem.h"
-#include "../ShaderLibrary.h"
-#include "../Config.h"
-#include "../Math.h"
+#include "scene/stage/RainSystem.h"
+#include "render/ShaderLibrary.h"
+#include "core/Config.h"
+#include "core/Math.h"
 
 #include <iostream>
 #include <cstdlib>

@@ -1,5 +1,5 @@
 #pragma once
-#include "Sprite.h"
+#include "sprite/Sprite.h"
 
 class FadeSprite : public Sprite {
 public:

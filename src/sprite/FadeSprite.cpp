@@ -1,5 +1,5 @@
-#include "FadeSprite.h"
-#include "../Math.h"
+#include "sprite/FadeSprite.h"
+#include "core/Math.h"
 
 FadeSprite::FadeSprite(std::shared_ptr<Texture2D> texture, float fadeInDuration, float fadeOutDuration, float keepDuration, 
     Vec2 refScale, Vec2 fadeInScaleRange, Vec2 fadeOutScaleRange) : 

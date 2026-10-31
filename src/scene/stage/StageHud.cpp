@@ -1,8 +1,8 @@
-#include "StageHud.h"
-#include "../../Config.h"
-#include "../../ui/UIWidget.h"
-#include "../../ui/UIBuilder.h"
-#include "../../ui/UITheme.h"
+#include "scene/stage/StageHud.h"
+#include "core/Config.h"
+#include "ui/UIWidget.h"
+#include "ui/UIBuilder.h"
+#include "ui/UITheme.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cmath>

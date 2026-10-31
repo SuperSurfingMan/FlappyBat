@@ -5,8 +5,8 @@
 // 所有按钮/图标几何形状简单, 完全由代码绘制以保证风格统一
 // =============================================================================
 #include "imgui.h"
-#include "UITheme.h"
-#include "../font/FontManager.h"
+#include "ui/UITheme.h"
+#include "ui/FontManager.h"
 #include <string>
 #include <cfloat>
 

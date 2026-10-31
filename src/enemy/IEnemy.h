@@ -1,6 +1,6 @@
 #pragma once
-#include "../GameMode.h"
-#include "../Math.h"
+#include "gameplay/GameMode.h"
+#include "core/Math.h"
 #include <memory>
 
 class Sprite;

@@ -1,13 +1,13 @@
-#include "MainSceneOverLayer.h"
-#include "../sprite/ButtonSprite.h"
-#include "../ui/UIBuilder.h"
-#include "../ui/UITheme.h"
-#include "../ui/UISystem.h"
-#include "../res/ResourceManager.h"
-#include "../sprite/Sprite.h"
-#include "../Config.h"
-#include "../scene/SceneManager.h"
-#include "../Math.h"
+#include "layer/MainSceneOverLayer.h"
+#include "sprite/ButtonSprite.h"
+#include "ui/UIBuilder.h"
+#include "ui/UITheme.h"
+#include "ui/UISystem.h"
+#include "res/ResourceManager.h"
+#include "sprite/Sprite.h"
+#include "core/Config.h"
+#include "scene/SceneManager.h"
+#include "core/Math.h"
 #include <iostream>
 
 namespace {

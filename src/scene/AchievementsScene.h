@@ -1,7 +1,7 @@
 #pragma once
-#include "Scene.h"
-#include "../ui/UIWidget.h"   // 滚轮区/滚动条等内联热区控件需完整类型
-#include "../ui/InputScope.h" // 成就页控件组（非模态）
+#include "scene/Scene.h"
+#include "ui/UIWidget.h"   // 滚轮区/滚动条等内联热区控件需完整类型
+#include "ui/InputScope.h" // 成就页控件组（非模态）
 #include <memory>
 
 class Sprite;

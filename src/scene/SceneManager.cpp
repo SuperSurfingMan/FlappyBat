@@ -1,6 +1,6 @@
-#include "SceneManager.h"
-#include "CircleFocusTransition.h"
-#include "../Config.h"
+#include "scene/SceneManager.h"
+#include "scene/CircleFocusTransition.h"
+#include "core/Config.h"
 #include <iostream>
 
 namespace {

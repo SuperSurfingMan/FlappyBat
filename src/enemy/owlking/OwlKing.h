@@ -1,6 +1,6 @@
 #pragma once
-#include "../IEnemy.h"
-#include "../shared/SpritePool.h"
+#include "enemy/IEnemy.h"
+#include "enemy/shared/SpritePool.h"
 #include <array>
 #include <memory>
 

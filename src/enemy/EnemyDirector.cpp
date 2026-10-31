@@ -1,4 +1,4 @@
-#include "EnemyDirector.h"
+#include "enemy/EnemyDirector.h"
 
 void EnemyDirector::Register(std::shared_ptr<IEnemy> enemy) {
     enemies_.push_back(std::move(enemy));

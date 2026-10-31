@@ -1,10 +1,10 @@
-#include "ItemField.h"
-#include "../../Config.h"
-#include "../../SpriteRenderer.h"
-#include "../../res/ResourceManager.h"
-#include "../../sprite/Sprite.h"
-#include "../../sprite/CollectableSprite.h"
-#include "../../ui/UITheme.h"
+#include "scene/stage/ItemField.h"
+#include "core/Config.h"
+#include "render/SpriteRenderer.h"
+#include "res/ResourceManager.h"
+#include "sprite/Sprite.h"
+#include "sprite/CollectableSprite.h"
+#include "ui/UITheme.h"
 #include <algorithm>
 #include <cmath>
 #include <iostream>

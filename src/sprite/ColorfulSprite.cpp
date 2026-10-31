@@ -1,5 +1,5 @@
-#include "ColorfulSprite.h"
-#include "../Math.h"
+#include "sprite/ColorfulSprite.h"
+#include "core/Math.h"
 
 ColorfulSprite::ColorfulSprite(std::shared_ptr<Texture2D> baseTexture, float periodTime) : period(periodTime) {
     texture = baseTexture;
