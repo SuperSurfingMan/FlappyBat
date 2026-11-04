@@ -180,6 +180,19 @@ void ResourceManager::StartLoading() {
     EnqueueTexture("bossOwlStormCallSheet", "assets/Animations/Spritesheets/BossOwlStormCall.png");
     EnqueueTexture("bossOwlDashSheet", "assets/Animations/Spritesheets/BossOwlDash.png");
     EnqueueTexture("bossSwoopSheet", "assets/Animations/Spritesheets/BossOwlSwoop.png");
+    // 枭王矢量批次（assets/Animations/Vector/OwlKing/render，tools/render_owlking_vector_sheets.py
+    // 光栅化产物）：与 legacy 归一化表同规格（640 方格、eye_anchor=格正中），OwlKing 运行时按
+    // ArtBatch 开关在两批同构纹理间切换；键 = legacy 键 + "_vec" 后缀，网格参数完全复用
+    EnqueueTexture("bossOwlFlapSheet10_vec", "assets/Animations/Vector/OwlKing/render/BossOwlFlap10.png");
+    EnqueueTexture("bossDeathSheet10_vec",   "assets/Animations/Vector/OwlKing/render/BossOwlDeath.png");
+    EnqueueTexture("bossOwlCastSheet_vec",   "assets/Animations/Vector/OwlKing/render/BossOwlCast.png");
+    EnqueueTexture("bossOwlFatigueSheet_vec","assets/Animations/Vector/OwlKing/render/BossOwlFatigue.png");
+    EnqueueTexture("bossOwlRageSheet_vec",   "assets/Animations/Vector/OwlKing/render/BossOwlRage.png");
+    EnqueueTexture("bossOwlHitSheet_vec",    "assets/Animations/Vector/OwlKing/render/BossOwlHit.png");
+    EnqueueTexture("bossOwlScreechSheet_vec","assets/Animations/Vector/OwlKing/render/BossOwlScreech.png");
+    EnqueueTexture("bossOwlStormCallSheet_vec","assets/Animations/Vector/OwlKing/render/BossOwlStormCall.png");
+    EnqueueTexture("bossOwlDashSheet_vec",   "assets/Animations/Vector/OwlKing/render/BossOwlDash.png");
+    EnqueueTexture("bossSwoopSheet_vec",     "assets/Animations/Vector/OwlKing/render/BossOwlSwoop.png");
     EnqueueTexture("mosquitoe", "assets/Animations/Spritesheets/mosquitoe.png");
     EnqueueTexture("kiwi", "assets/Animations/Spritesheets/kiwiFruit.png");
     EnqueueTexture("firefly", "assets/Animations/Spritesheets/firefly.png");

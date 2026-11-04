@@ -46,6 +46,14 @@ public:
 
     EnemyId Id() const override { return EnemyId::OwlKing; }
 
+    // ---- 形象资源批次开关：legacy 归一化序列帧 / Vector 矢量光栅序列帧 ----
+    // 两批素材同构（640 方格、eye_anchor=格正中，见 manifest.json），切表参数共用；
+    // 全局静态（枭王唯一），设置页切换，偏好持久化到统一存档（O 标签行）
+    enum class ArtBatch { Legacy, Vector };
+    static void     SetArtBatch(ArtBatch b);   // 切换并持久化（下帧 ApplyAnimation 重挂动画）
+    static ArtBatch GetArtBatch();             // 当前批次
+    static void     LoadArtBatchPref();        // 从统一存档读偏好（Init 前调用）
+
     void Init() override;
     void OnRunStart() override;
     void OnBatDead() override;
@@ -221,6 +229,10 @@ private:
     void ApplyAnimation();               // 每帧调用：期望动画 != 当前则切表
     Anim  DesiredAnim() const;           // 由 状态机/技能循环/狂暴/受击 推导期望动画
     void  ApplyClip(const std::shared_ptr<Sprite>& s, Anim a, int loopOverride = -1); // 应用动画表条目（切表即 Reset）
+    // 表演层辅助：批次感知纹理键（Legacy 直接用原键；Vector 加 "_vec" 后缀）
+    static std::string ArtKey(const char* legacyKey);
+    // 切换批次后强制重挂：curAnim/appliedBatch 与期望不一致时 ApplyClip（见 ApplyAnimation）
+    ArtBatch appliedBatch = ArtBatch::Legacy;
     int WeatherSlot() const { return kEnemyWeatherMsgSlotBase + (int)Id(); }
     int SkillMsgSlot() const { return WeatherSlot() + 8; } // 技能预警闪现槽位（与常驻枭王行分开，避免顶掉）
 };

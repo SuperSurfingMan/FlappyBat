@@ -6,6 +6,7 @@
 #include "core/Config.h"
 #include "audio/AudioSystem.h"
 #include "enemy/IStageFeedback.h"
+#include "app/UnifiedSave.h"
 #include "ui/UIBuilder.h"
 #include "ui/UITheme.h"
 #include "imgui.h"
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 // =============================================================================
@@ -62,11 +64,45 @@ float OwlKing::Aggression() {
     return std::clamp(s_aggression, 0.f, 1.f); // 存取双侧钳位：外部直改静态成员也安全
 }
 
+// ---- 形象资源批次（全局唯一；偏好持久化统一存档 O 标签行 "O <0|1>"）----
+// 默认 legacy：存量玩家升级到本版本后视觉不变，矢量批次由设置页显式开启
+static OwlKing::ArtBatch s_artBatch = OwlKing::ArtBatch::Legacy;
+
+void OwlKing::LoadArtBatchPref() {
+    for (const auto& line : UnifiedSave::ReadAllLines()) {
+        if (line.rfind("O ", 0) != 0) continue;
+        int v = -1;
+        std::istringstream ss(line.substr(2));
+        if (ss >> v && (v == 0 || v == 1)) {
+            s_artBatch = (v == 1) ? ArtBatch::Vector : ArtBatch::Legacy;
+        }
+        return;
+    }
+}
+
+void OwlKing::SetArtBatch(ArtBatch b) {
+    if (s_artBatch == b) return;
+    s_artBatch = b;
+    UnifiedSave::RewriteSection({"O"}, {std::string("O ") + (b == ArtBatch::Vector ? "1" : "0")});
+    std::cout << "[Boss] Art batch -> " << (b == ArtBatch::Vector ? "vector" : "legacy") << std::endl;
+}
+
+OwlKing::ArtBatch OwlKing::GetArtBatch() {
+    return s_artBatch;
+}
+
+// 批次感知纹理键：Vector 批次与 legacy 同名表一一对应（ResourceManager "_vec" 后缀注册）
+std::string OwlKing::ArtKey(const char* legacyKey) {
+    return (s_artBatch == ArtBatch::Vector) ? std::string(legacyKey) + "_vec" : std::string(legacyKey);
+}
+
 void OwlKing::Init() {
     auto& rm = ResourceManager::Get();
+    LoadArtBatchPref(); // 进入游戏前读批次偏好（静态开关，设置页可再切）
 
     // 枭王本体：初始为拍翼循环（透明底 2x5 网格 10 帧；后续由动画状态机按状态切表）
-    owlSprite = std::make_shared<Sprite>(rm.GetTexture2D("bossOwlFlapSheet10"));
+    // 纹理键经 ArtKey 按批次解析（legacy 原键 / vector "_vec" 后缀键，网格参数共用）
+    owlSprite = std::make_shared<Sprite>(rm.GetTexture2D(ArtKey("bossOwlFlapSheet10")));
     ApplyClip(owlSprite, Anim::Flap);
     curAnim = Anim::Flap;
     owlSprite->SetPosition(BossPosX, 480.f);
@@ -78,7 +114,7 @@ void OwlKing::Init() {
     moonSprite->SetPosition(0.f, 0.f); // 位置在 RenderWorld 中按窗口尺寸布置
 
     // B3 掠影专用精灵（ShadowDash Active 起始时经 ApplyClip 切表起播）
-    dashSprite = std::make_shared<Sprite>(rm.GetTexture2D("bossOwlDashSheet"));
+    dashSprite = std::make_shared<Sprite>(rm.GetTexture2D(ArtKey("bossOwlDashSheet")));
 
     // 羽刃对象池（B1 弹体）
     auto featherTex = rm.GetTexture2D("featherBlade");
@@ -324,9 +360,12 @@ void OwlKing::Update(float dt, const EnemyContext& ctx) {
 
 void OwlKing::ApplyAnimation() {
     const Anim want = DesiredAnim();
-    if (want == curAnim) return;
+    const ArtBatch batch = GetArtBatch();
+    if (want == curAnim && batch == appliedBatch) return;
     ApplyClip(owlSprite, want); // Swoop 入离场均循环（持续飞行节拍，避免定格悬停的僵直感）
+    // 设置页切换批次后同动画也在此重挂（appliedBatch 失配触发，切表即 Reset 从头播）
     curAnim = want;
+    appliedBatch = batch;
 }
 
 OwlKing::Anim OwlKing::DesiredAnim() const {
@@ -367,7 +406,7 @@ void OwlKing::ApplyClip(const std::shared_ptr<Sprite>& s, Anim a, int loopOverri
         /* Swoop     */ { "bossSwoopSheet",        1, 4, 0.20f,  true,  1, false }, // 飞行节拍循环（入离场共用）
     };
     const ClipSpec& c = kClips[(int)a];
-    auto tex = ResourceManager::Get().GetTexture2D(c.key);
+    auto tex = ResourceManager::Get().GetTexture2D(ArtKey(c.key)); // 批次感知键（legacy/vector 同构表）
     // 注意：Sprite 的 Animation 为懒创建（仅 InitAnimation* 内部 make_unique），
     // 必须先经 Sprite 层 Init 建立对象，GetAnimation() 才非空
     s->InitAnimationByTexture(tex, (size_t)c.rows, (size_t)c.cols);

@@ -8,6 +8,8 @@ class Sprite;
 class ButtonSprite;
 
 // 声音设置场景：用 ImGui 滑块让玩家实时调整全局/BGM/音效音量，并持久化
+// 设置页分栏（模仿排行榜页签）：「音量设置」「枭王形象」两个子栏目，
+// 面板顶部的页签行切换，各栏目内部 UI 与切换前保持一致
 class SettingsScene : public Scene {
 public:
     SettingsScene();
@@ -20,8 +22,14 @@ public:
     void Reset() override;
 
 private:
+    // ===== 子栏目（页签切换；选中页签禁用自身，同排行榜惯例） =====
+    enum class Tab { Volume, OwlArt };
+    void SwitchTab(Tab t);
+
     std::shared_ptr<Sprite> background;
     std::shared_ptr<ButtonSprite> backToReady;
+
+    Tab tab = Tab::Volume; // 当前栏目（每次进入/Reset 回音量栏目）
 
     // 本地缓存的音量值（OnEnter 时从 AudioSystem 读入，滑块绑定此处）
     float masterVolume = 1.0f;
@@ -29,13 +37,16 @@ private:
     float sfxVolume    = 1.0f;
 
     // ===== UI 交互控件（拖动归属由 UISystem 维护） =====
-    int settingsGroupId = -1; // 设置页控件组：返回按钮 + 三条音量滑条
+    int settingsGroupId = -1; // 设置页控件组：返回按钮 + 页签 + 音量滑条 + 枭王形象切换
     InputScope settingsScope;
+    std::shared_ptr<UIWidget> tabs[2];   // 栏目页签（音量设置 / 枭王形象；选中项禁用）
     std::shared_ptr<UIWidget> sliders[3];
                             // 全局/背景音乐/音效滑条（按下即捕获；构造函数中逐个创建后登记）
+    std::shared_ptr<UIWidget> artToggle; // 枭王形象分段切换（legacy/Vector，点击循环切换）
 
     void SyncFromAudioSystem();
     void DrawImGuiLayout();
+    void DrawModeTabs(float panelX, float panelTop); // 页签行（模仿排行榜 DrawModeTabs）
     float& VolumeRef(int idx);           // 按下标取对应音量缓存字段
     void   ApplyVolume(int idx, float v); // 写入 AudioSystem 并实时持久化
 };
