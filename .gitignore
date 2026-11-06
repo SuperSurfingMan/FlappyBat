@@ -1,0 +1,31 @@
+# ===== 构建产物 =====
+build/
+build_*/
+single_exe/build/
+
+# ===== 运行时生成的存档与本地配置 =====
+*.dat
+imgui.ini
+*.log
+build_err.txt
+
+# ===== 游戏资源（未纳入版本管理）=====
+assets/
+
+# ===== 本地文档与工具目录（未纳入版本管理）=====
+docs/
+tools/
+webport/
+generated-images/
+_*.png
+
+# ===== 编辑器 / 本地工具目录 =====
+.vs/
+.vscode/
+.idea/
+.clangd
+.cache/
+.arts/
+.codeartsdoer/
+.zcode/
+AGENTS.md
