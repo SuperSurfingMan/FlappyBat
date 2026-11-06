@@ -51,15 +51,15 @@ src/
 
 ## 第三方依赖
 
-所有第三方库均已收录在工程根目录的 `vendor/` 下，**无需单独安装**：
+所有第三方库均已收录在仓库的 `vendor/` 目录下，**克隆后无需单独安装**：
 
-| 库 | 版本 | 形式 |
-|----|------|------|
-| [GLFW](https://www.glfw.org/) | 3.4.0 | 预编译 `libglfw3.a` + `glfw3.dll`（x64） |
-| [glad](https://glad.dav1d.de/) | OpenGL 3.3 Core | 源码，编译为静态库 `glad` |
-| [Dear ImGui](https://github.com/ocornut/imgui) | 1.92.4 | 源码，编译为静态库 `imgui`（含 GLFW / OpenGL3 后端） |
-| [stb_image](https://github.com/nothings/stb) | — | 单头文件 `stb_image.h` |
-| [miniaudio](https://github.com/mackron/miniaudio) | — | 单头文件 `miniaudio.h` |
+| 库 | 版本 | 形式 | 官方仓库 |
+|----|------|------|----------|
+| GLFW | 3.4.0 | 预编译 `libglfw3.a` + `glfw3.dll`（x64） | [github.com/glfw/glfw](https://github.com/glfw/glfw) |
+| glad | OpenGL 3.3 Core | 源码，编译为静态库 `glad` | [github.com/Dav1dde/glad](https://github.com/Dav1dde/glad) |
+| Dear ImGui | 1.92.4 | 源码，编译为静态库 `imgui`（含 GLFW / OpenGL3 后端） | [github.com/ocornut/imgui](https://github.com/ocornut/imgui) |
+| stb_image | — | 单头文件 `stb_image.h` | [github.com/nothings/stb](https://github.com/nothings/stb) |
+| miniaudio | — | 单头文件 `miniaudio.h` | [github.com/mackron/miniaudio](https://github.com/mackron/miniaudio) |
 
 系统级依赖仅 Windows 自带的 `opengl32` / `gdi32` / `user32`。
 
@@ -82,23 +82,26 @@ src/
    g++ --version && cmake --version && mingw32-make --version
    ```
 
-### 2. 认识完整工程布局
+### 2. 克隆与工程布局
 
-完整的可构建工程由以下部分组成：
+```bash
+git clone https://github.com/SuperSurfingMan/FlappyBat.git
+cd FlappyBat
+```
+
+仓库结构：
 
 ```
 FlappyBat/
 ├── CMakeLists.txt      # 构建脚本（定义 glad / imgui 静态库与 demo 可执行文件）
-├── vendor/             # 上述第三方库（GLFW / glad / imgui / stb / miniaudio）
-├── assets/             # 游戏资源：贴图、精灵图集、音频、字体、GLSL 着色器
-└── src/                # 全部 C++ 源码（即本仓库内容）
+├── vendor/             # 第三方库（GLFW / glad / imgui / stb / miniaudio）
+├── src/                # 全部 C++ 源码
+└── README.md
 ```
-
-> ⚠️ **仓库范围说明**：本仓库当前仅收录 `src/` 源码树；`CMakeLists.txt`、`vendor/` 与 `assets/` 位于作者本地工程根目录，尚未纳入版本管理。若你单独 clone 本仓库，需补齐上述三部分才能构建。
 
 ### 3. 配置与编译
 
-在工程根目录（`CMakeLists.txt` 所在目录）执行：
+在仓库根目录（`CMakeLists.txt` 所在目录）执行：
 
 ```bash
 # 配置（首次会生成 build 目录）
@@ -115,30 +118,24 @@ cmake --build build -j
 
 ### 4. 运行
 
-资源以 `assets/...` 相对路径加载，**必须在工程根目录下启动**：
+游戏资源（贴图、音频、着色器）在运行时从工作目录的 `assets/` 目录按相对路径加载，因此**需在工程根目录下启动**：
 
 ```bash
-# 在工程根目录执行
 ./build/demo.exe        # MSYS2 / Git Bash
 # 或
 build\demo.exe          # cmd / PowerShell
 ```
 
-窗口大小固定为 540 × 960。首次运行后会在工作目录生成 `player_save.dat`（金币 / 科技树 / 成就 / 音量）与 `score.dat`（排行榜）等存档文件；若存在旧版 `profile.dat`、`achievements.dat`、`audio_settings.dat`，会自动完成一次性迁移。
+窗口大小固定为 540 × 960。首次运行后会在工作目录生成 `player_save.dat`（金币 / 科技树 / 成就 / 音量）与 `score.dat`（排行榜）等存档文件。
 
 ### 5. 用 VS Code 开发（可选）
 
-工程内含 `.vscode/` 与 `.clangd` 配置：IntelliSense / clangd 指向 `C:/msys64/mingw64` 工具链，clangd 使用 `build/compile_commands.json`（CMake 已开启 `CMAKE_EXPORT_COMPILE_COMMANDS`）提供精确跳转；`launch.json` 提供 GDB 调试入口。
+CMake 已开启 `CMAKE_EXPORT_COMPILE_COMMANDS`，构建后会在 `build/compile_commands.json` 生成编译数据库，可直接供 clangd 使用；VS Code 中安装 C/C++ 与 clangd 插件、将编译器路径指向 MSYS2 的 g++（如 `C:/msys64/mingw64/bin/g++.exe`），即可获得精确的代码跳转与补全。
 
 ### 常见问题
 
 | 现象 | 原因与解决 |
 |------|------------|
 | 配置阶段报 `This project is intended to be built with MinGW-w64` | 使用了非 MinGW 工具链，请改在 MSYS2 MINGW64 终端中构建 |
-| 启动后闪退 / 找不到资源 | 未在工程根目录启动，`assets/` 相对路径无法解析 |
 | 提示缺少 `glfw3.dll` | 直接运行了别处拷出的 exe；请运行 `build/` 下的 `demo.exe`（构建时已自动拷贝 DLL） |
 | 链接期报 MinGW 运行时符号冲突 | 系统 PATH 中混入了其他 MinGW 环境的旧版 DLL；工程已 `-static` 静态链接运行时，请检查 PATH |
-
-## 相关文档
-
-作者工作区的 `docs/` 目录维护了更深入的设计文档：《项目代码结构说明》《怪物系统架构设计》《BOSS 系统设计文档》《UI 重构方案》等，可作为阅读源码的路线图。
