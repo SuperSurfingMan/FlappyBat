@@ -29,3 +29,7 @@ _*.png
 .codeartsdoer/
 .zcode/
 AGENTS.md
+
+# ===== 其他本地目录（未纳入版本管理）=====
+single_exe/
+start_web.bat
