@@ -4,6 +4,8 @@
 #include <memory>
 
 class BatSprite;
+class Config;
+class PlayerProfile;
 struct IFeedbackFx;
 
 // =============================================================================
@@ -16,7 +18,10 @@ struct IFeedbackFx;
 // =============================================================================
 class PlayerAbilities {
 public:
-    void Init(std::shared_ptr<BatSprite> bat, IFeedbackFx* fx);
+    // 依赖注入：配置（体型/重力边界）与玩家档案（升级等级/金币）。
+    // 上行反馈仍只依赖 IFeedbackFx，本类不接触音频/UI/存档实现。
+    void Init(std::shared_ptr<BatSprite> bat, IFeedbackFx* fx,
+              const Config& cfg, PlayerProfile& profile);
     void Reset();
     void SetLocked(bool locked) { locked_ = locked; }
 
@@ -64,6 +69,8 @@ private:
 
     std::shared_ptr<BatSprite> bat;
     IFeedbackFx* fx = nullptr;
+    const Config* cfg_ = nullptr;
+    PlayerProfile* profile_ = nullptr;
     bool locked_ = false;
 
     // ===== 能量护盾 =====

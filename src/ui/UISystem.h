@@ -31,6 +31,8 @@
 #include <memory>
 #include <vector>
 
+class AudioSystem;
+
 class UISystem {
 public:
     using UIGroupId = int;
@@ -38,6 +40,10 @@ public:
 
     // 泄漏式单例（见 UISystem.cpp）：登记表共享持有控件，且图层/场景析构时会回调用本系统注销 sink
     static UISystem& Get();
+
+    // 集中反馈音效的播放器由组合根装配（Services 构造时注入）：
+    // 本系统只做"何时响"，不认识音频实现，也不再有全局静态访问点。
+    void SetAudio(AudioSystem& audio) { audio_ = &audio; }
 
     // ===== 组管理 =====
     UIGroupId CreateGroup(int layer);
@@ -114,8 +120,7 @@ private:
     void PushGameInput(bool leftPressEdge, bool leftDown, bool leftReleaseEdge);
 
 private:
-    std::vector<Group> groups;
-    std::vector<UIGroupId> sortedGroups;  // 按 (layer, 创建序) 降序的组索引（仅创建组时重排）
+    std::vector<Group> groups;    std::vector<UIGroupId> sortedGroups;  // 按 (layer, 创建序) 降序的组索引（仅创建组时重排）
     std::vector<UIGroupId> modalStack;
     int nextGroupOrder = 0;
 
@@ -136,4 +141,7 @@ private:
 
     // 全屏交互闸门（每帧由 Application 依 SceneManager 状态同步）
     bool interactionBlocked = false;
+
+    // 集中反馈音效的播放器（组合根注入；未注入时静音而不是崩溃）
+    AudioSystem* audio_ = nullptr;
 };

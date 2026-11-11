@@ -14,6 +14,7 @@
 
 class RainSystem;
 class Sprite;
+class Config;
 
 class ResourceManager
 {
@@ -34,7 +35,9 @@ public:
 
     const std::array<Vec2, 2> GetUVcords2(const std::string& key);
 
-    void Init();
+    // 配置由组合根注入（必须在任何资源构建之前调用）：本类不再有全局静态访问点，
+    // 因此"按哪个窗口尺寸生成精灵"由调用方明确决定，不会出现隐式默认值。
+    void Init(const Config& cfg);
 
     // ===== 异步加载（与 BootScene 完全并行） =====
     // 后台线程：磁盘 IO + PNG 解码（不碰 GL）
@@ -78,6 +81,9 @@ private:
     std::unordered_map<std::string, std::vector<std::shared_ptr<Sprite>>> spriteListResources;
 
     std::shared_ptr<RainSystem> rainSystem;
+
+    // 组合根注入的配置（Init 之后全程有效，生命周期长于本单例的使用期）
+    const Config* cfg_ = nullptr;
 
     // ===== 异步加载状态 =====
     struct PendingTexture {

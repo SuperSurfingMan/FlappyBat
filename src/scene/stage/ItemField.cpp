@@ -1,10 +1,10 @@
-#include "app/Services.h"
 #include "scene/stage/ItemField.h"
 #include "core/Config.h"
 #include "render/SpriteRenderer.h"
 #include "res/ResourceManager.h"
 #include "sprite/Sprite.h"
 #include "sprite/CollectableSprite.h"
+#include "audio/AudioSystem.h"
 #include "ui/UITheme.h"
 #include <algorithm>
 #include <array>
@@ -43,11 +43,12 @@ const ItemField::Effect& ItemField::EffectOf(int itemType) {
     return ItemAt((size_t)itemType).effect;
 }
 
-void ItemField::Load() {
+void ItemField::Load(ResourceManager& res, AudioSystem& audio) {
+    audio_ = &audio;
     for (int type = 0; type < (int)TypeCount; ++type) {
-        pools_[type] = Services::Get().Res().GetSpriteList(ItemAt((size_t)type).poolKey);
+        pools_[type] = res.GetSpriteList(ItemAt((size_t)type).poolKey);
     }
-    giantOrb = Services::Get().Res().GetSprite("giantOrb");
+    giantOrb = res.GetSprite("giantOrb");
 }
 
 void ItemField::SetPickupHandler(std::function<void(int)> cb) {
@@ -56,6 +57,8 @@ void ItemField::SetPickupHandler(std::function<void(int)> cb) {
         for (auto& sp : *Pool(type)) {
             std::static_pointer_cast<CollectableSprite>(sp)->SetCallback([this, type]() {
                 if (onPickup_) onPickup_(type);
+                // 拾取音效随收益一起结算（顺序与原实现一致：先回调再出声）
+                if (audio_) audio_->PlaySFX(SFXToFile(SFX::Collect), 0.9f);
             });
         }
     }

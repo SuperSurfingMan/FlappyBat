@@ -161,9 +161,14 @@ add_executable(demo
     src/scene/SceneKey.h
     src/scene/SceneManager.cpp
     src/scene/BootScene.cpp
-    src/scene/ReadyScene.cpp
+    src/scene/ReadyScene.cpp          # 生命周期 / 布景 / 控件登记
+    src/scene/ReadySceneMenu.cpp      # 分裂式模式选择（悬停/动效/解释框/启动）
+    src/scene/ReadySceneUpgrade.cpp   # 护盾升级入口与面板
+    src/scene/ReadySceneLayout.h      # 主菜单布局常量与几何公式
     src/scene/MainScene.cpp
-    src/scene/ScoreRankScene.cpp
+    src/scene/ScoreRankScene.cpp        # 数据加载 / 切页 / 生命周期
+    src/scene/ScoreRankSceneView.cpp    # 页签行 / 榜单列表 / 滚动
+    src/scene/ScoreRankSceneDialog.cpp  # 清空记录的二次确认
     src/scene/AchievementsScene.cpp
     src/scene/SettingsScene.cpp
 
@@ -172,10 +177,14 @@ add_executable(demo
     src/scene/stage/PlayerAbilities.cpp
     src/scene/stage/ObstacleField.cpp
     src/scene/stage/ItemField.cpp
-    src/scene/stage/WeatherDirector.cpp
+    src/scene/stage/WeatherDirector.cpp   # 阵风 / 天色 / 档位联动 / 渲染器注册
+    src/scene/stage/WeatherMsgBox.cpp     # 天气事件消息盒（状态机 + 绘制）
+    src/scene/stage/WeatherWarning.cpp    # 落雷预警覆盖层 + 雷线几何
     src/scene/stage/WeatherRendererRoster.h
     src/scene/stage/WeatherRendererRoster.cpp
-    src/scene/stage/RainSystem.cpp
+    src/scene/stage/RainSystem.cpp            # 帧循环 / 雨滴推进 / 雨强
+    src/scene/stage/RainSystemLightning.cpp   # 预警 -> 落雷状态机 / 折线生成
+    src/scene/stage/RainSystemSplash.cpp      # 水花精灵池 / 地形表面采样
     src/scene/stage/FeedbackFx.cpp
     src/scene/stage/StageHud.cpp
     src/scene/stage/ParallaxField.cpp

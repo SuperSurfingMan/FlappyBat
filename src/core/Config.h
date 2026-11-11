@@ -23,8 +23,10 @@ public:
 
     void LoadParamsFromFile(const std::string& filename); // 从文件加载参数的函数声明
 
+    // 只读查询：const 限定使注入侧的 `const Config&` 也能用（此前只能拿非 const 引用，
+    // 导致子系统被迫持有可写配置指针）。
     template<typename T>
-    T GetProperty(const std::string key) {
+    T GetProperty(const std::string& key) const {
         auto it = propertiesList.find(key);
         if (it == propertiesList.end()) {
             throw std::out_of_range("key not exists: " + key);

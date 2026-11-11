@@ -1,10 +1,8 @@
-#include "app/Services.h"
 #include "render/WindRenderer.h"
 
 #include "render/Shader.h"
 #include "render/ShaderLibrary.h"
 #include "render/RenderState.h"
-#include "core/Config.h"
 
 #include <glad/glad.h>
 #include <cmath>
@@ -28,8 +26,10 @@ constexpr float kLeftColor[3]  = { 0.55f, 0.60f, 1.00f };
 constexpr float kRightColor[3] = { 0.42f, 0.76f, 0.95f };
 }
 
-void WindRenderer::Init()
+void WindRenderer::Init(float screenW, float screenH)
 {
+    screenW_ = screenW;
+    screenH_ = screenH;
     shader_ = ShaderLibrary::Instance().Get("wind");
 
     InitInstancedQuad((size_t)kLineCount, sizeof(WindInstance));
@@ -53,8 +53,8 @@ void WindRenderer::ReseedLine(WindLine& line, bool anywhere) {
     static thread_local std::mt19937 rng{ std::random_device{}() };
     std::uniform_real_distribution<float> rnd(0.0f, 1.0f);
 
-    const float sw = (float)Services::Get().Cfg().GetScreenWidth();
-    const float sh = (float)Services::Get().Cfg().GetScreenHeight();
+    const float sw = screenW_;
+    const float sh = screenH_;
 
     line.length = 110.0f + rnd(rng) * 90.0f;                        // 110~200(连续长线)
     line.width  = 1.3f + rnd(rng) * 0.6f;                           // 1.3~1.9(原 0.7~1.1 属亚像素级,无 MSAA 下被光栅化稀释到近乎不可见)
@@ -110,8 +110,8 @@ void WindRenderer::Update(float dt)
     const float rhythm = 0.775f + 0.225f * std::sin(time_ * kRhythmFreq);
 
     // 细线沿流向移动;出界后从入场端重生
-    const float sw = (float)Services::Get().Cfg().GetScreenWidth();
-    const float sh = (float)Services::Get().Cfg().GetScreenHeight();
+    const float sw = screenW_;
+    const float sh = screenH_;
     for (auto& line : lines_) {
         const float v = (140.0f + 90.0f * line.speed) * strength_ * rhythm * dt;
         line.pos.x += flowDir_.x * v;

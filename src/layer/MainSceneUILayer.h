@@ -7,12 +7,13 @@
 
 class Sprite;
 class ButtonSprite;
+class Services;
 
 // 暂停系统 UI 图层：作为 IGameInputSink 订阅推送式输入，只读暂停快捷键（ESC/P/R），
 // 不再自行逐帧询问 Input 设备（设备采集集中于 UISystem）。
 class MainSceneUILayer : public Layer, public IGameInputSink {
 public:
-    MainSceneUILayer();
+    explicit MainSceneUILayer(Services& svc_);
     ~MainSceneUILayer() override;
 
     void Reset() override;
@@ -35,6 +36,8 @@ protected:
     void OnInputEnabledChanged(bool enabled) override;
 
 private:
+    Services& svc_; // 构造期注入的服务聚合（音频/配置/资源/场景路由）
+
     // 顶部图标按钮（暂停 / 返回 / 退出）
     std::shared_ptr<ButtonSprite> pauseButton;
     std::shared_ptr<ButtonSprite> homeButton;

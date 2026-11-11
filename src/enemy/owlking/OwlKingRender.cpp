@@ -1,4 +1,3 @@
-#include "app/Services.h"
 #include "enemy/owlking/OwlKing.h"
 #include "sprite/Sprite.h"
 #include "render/Texture2D.h"
@@ -90,7 +89,7 @@ void OwlKing::ApplyClip(const std::shared_ptr<Sprite>& s, Anim a, int loopOverri
         /* Swoop     */ { "bossSwoopSheet",        1, 4, 0.20f,  true,  1, false }, // 飞行节拍循环（入离场共用）
     };
     const ClipSpec& c = kClips[(int)a];
-    auto tex = Services::Get().Res().GetTexture2D(ArtKey(c.key)); // 批次感知键（legacy/vector 同构表）
+    auto tex = res_->GetTexture2D(ArtKey(c.key)); // 批次感知键（legacy/vector 同构表）
     // 注意：Sprite 的 Animation 为懒创建（仅 InitAnimation* 内部 make_unique），
     // 必须先经 Sprite 层 Init 建立对象，GetAnimation() 才非空
     s->InitAnimationByTexture(tex, (size_t)c.rows, (size_t)c.cols);
@@ -110,8 +109,8 @@ void OwlKing::ApplyClip(const std::shared_ptr<Sprite>& s, Anim a, int loopOverri
 // ===== 世界层渲染（渲染期为表现路径，窗口尺寸直读 Config） =====
 
 void OwlKing::RenderWorld(SpriteRenderer& renderer) {
-    const float W = (float)Services::Get().Cfg().GetScreenWidth();
-    const float H = (float)Services::Get().Cfg().GetScreenHeight();
+    const float W = (float)cfg_->GetScreenWidth();
+    const float H = (float)cfg_->GetScreenHeight();
 
     // 血月：Warning 淡入 → Engagement 常驻 → Defeat/Leave 淡出
     // B6 血月坠羽：血月增亮泛红（§5 B6 预警意象）
@@ -218,8 +217,8 @@ void OwlKing::RenderUI() {
     ImFont* font = UIBuilder::GetFont();
     if (!font) return;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    const float W = (float)Services::Get().Cfg().GetScreenWidth();
-    const float H = (float)Services::Get().Cfg().GetScreenHeight();
+    const float W = (float)cfg_->GetScreenWidth();
+    const float H = (float)cfg_->GetScreenHeight();
 
     // ---- Warning 期：右缘暗红渐晕（血月意象） ----
     if (phase == Phase::Warning) {
@@ -434,7 +433,7 @@ void OwlKing::RenderUI() {
     // ---- B5 雷暴召唤：三落点预警虚线 +「雷」字（落雷前可见；落雷本体走 RainSystem 折线管线） ----
     if (phase == Phase::Engagement && curSkill == Skill::StormCall &&
         skillState == SkillState::Active) {
-        const float groundY = H - Services::Get().Cfg().GetTerrainHeight();
+        const float groundY = H - cfg_->GetTerrainHeight();
         for (int i = stormStruck; i < 3; ++i) {
             const float sx = stormXs[i];
             float pulse = 0.5f + 0.5f * std::sin(worldClock * 10.f + (float)i);

@@ -3,6 +3,7 @@
 #include <random>
 #include <memory>
 #include <unordered_set>
+#include <functional>
 #include "core/Math.h"
 #include "core/Timer.h"
 
@@ -11,6 +12,8 @@
 #include "core/Config.h"
 
 class SpriteRenderer;
+class Config;
+class ResourceManager;
 
 struct RainDrop
 {
@@ -106,9 +109,14 @@ public:
     void SetRainIntensity(float t);                          // 0~1，渐变过渡
     size_t GetActiveDropCount() const { return activeDropCount; }
 
-    // 分步初始化（数据部分，供增量加载调用）
-    void InitStepRains();
-    void InitStepSplashSets();
+    // 分步初始化（数据部分，供增量加载调用）：配置与贴图由资源管理器注入，
+    // 本类不再查全局服务（纯逻辑系统，可脱离引擎单独构造与验证）。
+    void InitStepRains(const Config& cfg);
+    void InitStepSplashSets(const Config& cfg, ResourceManager& res);
+
+    // 雷击音效钩子：落雷瞬间由本类触发，具体发声由装配方（WeatherDirector）决定。
+    // 逻辑系统因此不必 include 音频实现，自测里也可以换成计数回调。
+    void SetThunderHook(std::function<void()> hook) { thunderHook_ = std::move(hook); }
 
     // ===== 只读数据访问（供渲染器使用） =====
     const std::vector<RainDrop>& GetDrops() const { return rainDrops; }
@@ -124,7 +132,7 @@ public:
 
 private:
     void InitRains(int count, float screenWidth, float screenHeight);
-    void InitSplashSets(size_t set_size);
+    void InitSplashSets(ResourceManager& res, size_t set_size);
 
 private:
     std::vector<RainDrop> rainDrops;
@@ -137,6 +145,9 @@ private:
 
 private:
     void UpdateRains(float dt);
+    // 闪电状态机与呼吸闪烁（实现在 RainSystemLightning.cpp）：
+    // 预警轴 -> 落雷 -> 危险窗 -> 结束（含被顺延的预警）都在这里推进
+    void UpdateLightning(float dt);
 
     void GenerateLightning(float strikeX); // 自落点向上生成，与预警光柱锚定同一位置
     void GenerateBranches(const LightningBranch& parent, int depth);
@@ -186,6 +197,8 @@ private:
 
     std::unordered_set<std::shared_ptr<Sprite>> rainSplashSpritesActive;
     std::unordered_set<std::shared_ptr<Sprite>> rainSplashSpritesInactive;
+
+    std::function<void()> thunderHook_;
 
     void UpdateSplashSprites(float dt);
     void SpawnSplash(Vec2 position, Vec2 rotation);

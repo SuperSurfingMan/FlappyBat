@@ -1,4 +1,3 @@
-#include "app/Services.h"
 #include "res/ResourceManager.h"
 #include "res/ResourceCatalog.h"
 #include "gameplay/ItemCatalog.h"
@@ -24,7 +23,8 @@ ResourceManager::~ResourceManager() {
     Shutdown();
 }
 
-void ResourceManager::Init() {
+void ResourceManager::Init(const Config& cfg) {
+    cfg_ = &cfg;
     InitUVCordsResources();
     std::cout << "Building async resource load pipeline... \n";
     StartLoading();
@@ -194,8 +194,8 @@ void ResourceManager::InitRainSystem() {
     postTextureTasks.push_back([this]() {
         rainSystem = std::make_shared<RainSystem>();
     });
-    postTextureTasks.push_back([this]() { rainSystem->InitStepRains(); });
-    postTextureTasks.push_back([this]() { rainSystem->InitStepSplashSets(); });
+    postTextureTasks.push_back([this]() { rainSystem->InitStepRains(*cfg_); });
+    postTextureTasks.push_back([this]() { rainSystem->InitStepSplashSets(*cfg_, *this); });
 
     // shader 预编译：RainRenderer / LightningRenderer 构造时通过 ShaderLibrary 获取
     postTextureTasks.push_back([]() {
@@ -215,17 +215,17 @@ void ResourceManager::InitRainSystem() {
 
 void ResourceManager::InitSprites() {
     auto batTex = GetTexture2D("bat");
-    auto batSprite = std::make_shared<BatSprite>(batTex);
-    batSprite->SetScale(Services::Get().Cfg().GetBatSize(), Services::Get().Cfg().GetBatSize());
+    auto batSprite = std::make_shared<BatSprite>(batTex, *this, *cfg_);
+    batSprite->SetScale(cfg_->GetBatSize(), cfg_->GetBatSize());
     spriteResources["bat"] = batSprite;
 }
 
 void ResourceManager::InitSpriteLists() {
-    float terrainRenderHeight = Services::Get().Cfg().GetTerrainRenderHeight();
-    float terrainHeight = Services::Get().Cfg().GetTerrainHeight();
+    float terrainRenderHeight = cfg_->GetTerrainRenderHeight();
+    float terrainHeight = cfg_->GetTerrainHeight();
 
-    const float WIN_HEIGHT = Services::Get().Cfg().GetScreenHeight();
-    const float WIN_WIDTH = Services::Get().Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = cfg_->GetScreenHeight();
+    const float WIN_WIDTH = cfg_->GetScreenWidth();
 
     
     // 初始化背景
@@ -278,14 +278,14 @@ void ResourceManager::InitSpriteLists() {
 
     // 初始化可收集物品：按 ItemCatalog 定义表登记精灵池与动画网格。
     // 新增道具不需要改这里（也不再有 type == "kiwi" 的帧数特例）。
-    Vec2 collectableItemScale = Services::Get().Cfg().GetProperty<Vec2>("collectableItemScale");
+    Vec2 collectableItemScale = cfg_->GetProperty<Vec2>("collectableItemScale");
 
     for (const auto& def : kItemDefinitions) {
         auto& pool = spriteListResources[def.poolKey];
         for (size_t i = 0; i < 3; ++i) { // 每类池容量 = ItemField::ItemPoolCap
             auto item = std::make_shared<CollectableSprite>();
             item->InitAnimations(def.key, (size_t)def.rows, (size_t)def.cols,
-                                 def.disappearFrames);
+                                 def.disappearFrames, *this);
             item->SetScale(collectableItemScale.x, collectableItemScale.y);
             pool.push_back(item);
         }

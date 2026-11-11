@@ -7,10 +7,11 @@
 
 class Sprite;
 class ButtonSprite;
+class Services;
 
 class MainSceneOverLayer : public Layer {
 public:
-    MainSceneOverLayer();
+    explicit MainSceneOverLayer(Services& svc_);
     ~MainSceneOverLayer() = default;
 
     void Reset() override;
@@ -30,6 +31,8 @@ protected:
     void OnInputEnabledChanged(bool enabled) override;
 
 private:
+    Services& svc_; // 构造期注入的服务聚合
+
     std::shared_ptr<Sprite> gameOverImage;
     std::shared_ptr<ButtonSprite> restartButton;
     std::shared_ptr<ButtonSprite> backToReadyButton;

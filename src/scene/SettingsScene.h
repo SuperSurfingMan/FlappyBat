@@ -6,13 +6,14 @@
 
 class Sprite;
 class ButtonSprite;
+class Services;
 
 // 声音设置场景：用 ImGui 滑块让玩家实时调整全局/BGM/音效音量，并持久化
 // 设置页分栏（模仿排行榜页签）：「音量设置」「枭王形象」两个子栏目，
 // 面板顶部的页签行切换，各栏目内部 UI 与切换前保持一致
 class SettingsScene : public Scene {
 public:
-    SettingsScene();
+    explicit SettingsScene(Services& svc_);
     ~SettingsScene();
 
     void OnEnter() override;
@@ -22,6 +23,8 @@ public:
     void Reset() override;
 
 private:
+    Services& svc_; // 构造期注入的服务聚合
+
     // ===== 子栏目（页签切换；选中页签禁用自身，同排行榜惯例） =====
     enum class Tab { Volume, OwlArt };
     void SwitchTab(Tab t);

@@ -30,8 +30,10 @@ public:
     WindRenderer() = default;
     ~WindRenderer() = default;
 
-    // 需在 GL 上下文就绪、且 "wind" shader 已通过 ShaderLibrary 预编译后调用
-    void Init();
+    // 需在 GL 上下文就绪、且 "wind" shader 已通过 ShaderLibrary 预编译后调用。
+    // 视口尺寸在 Init 时一次给定（窗口不可缩放）：铺场/重生/出界判定全部以它为准，
+    // 渲染器不再逐帧查全局配置。
+    void Init(float screenW, float screenH);
 
     // 每帧喂入阵风状态(WeatherDirector 在统一 Update 之前调用):
     // active=阵风是否生效(预警期不算),force=推力向量(仅一轴非零:
@@ -47,6 +49,9 @@ public:
     std::vector<WorldSlot> Slots() const override { return { WorldSlot::WindLines }; }
 
 private:
+    float screenW_ = 0.0f;
+    float screenH_ = 0.0f;
+
     // CPU 侧细线数据(程序化生成与推进;涡摆/收细由 shader 完成)
     struct WindLine {
         Vec2 pos;             // 线中心(沿流向移动)

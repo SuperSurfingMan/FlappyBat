@@ -1,6 +1,7 @@
 #pragma once
 #include "scene/stage/StageFrame.h"
 #include "scene/stage/RainSystem.h"
+#include "scene/stage/WeatherMsgBox.h"
 #include "render/IRenderer.h"
 #include "render/WorldSlot.h"
 #include "render/RenderContext.h"
@@ -10,6 +11,9 @@
 #include <vector>
 
 struct ModeParams;
+class Config;
+class ResourceManager;
+class AudioSystem;
 class RainRenderer;
 class LightningRenderer;
 class WindRenderer;
@@ -29,7 +33,9 @@ enum WeatherMsgSlot { WMsgGust = 0, WMsgLightning = 1, WMsgStorm = 2 };
 // =============================================================================
 class WeatherDirector {
 public:
-    void Init();                                  // 取 RainSystem / 遮罩，并委托登记表注入渲染器
+    // 依赖由场景注入：配置（遮罩几何/预警绘制）、资源（雨系统与白纹理）、
+    // 音频（落雷音效经 RainSystem 的钩子上行）。本类不再查全局服务。
+    void Init(const Config& cfg, ResourceManager& res, AudioSystem& audio);
     // 注册一个天气渲染器：立即按 Slots() 声明加入槽位分发表。
     // 新增特效 = 实现 IRenderer + 在 WeatherRendererRoster.cpp 加一行，本类零改动。
     void AddRenderer(std::unique_ptr<IRenderer> renderer);
@@ -74,20 +80,11 @@ public:
 private:
     void RenderScrim(const RenderContext& ctx); // 天色变暗遮罩（透明度过低时为空操作）
 
-    struct Msg {
-        int id = 0;
-        std::string text;
-        float warnTimer = 0.0f;
-        bool steady = false;
-        bool autoSteady = false;
-    };
-
     // ===== 阵风（A4-b） =====
     static constexpr float GustDurationMin = 1.2f;
     static constexpr float GustDurationMax = 2.0f;
     static constexpr float GustForceMax = 220.0f;
     static constexpr float WeatherWarnLead = 2.0f;
-    static constexpr size_t MsgCap = 4;
     static constexpr float LightningBatRadius = 26.0f; // 蝙蝠等效受击半径（雷线走廊之外额外余量）
 
     float gustCooldown = 7.0f;
@@ -96,15 +93,16 @@ private:
     float gustWarnTimer = 0.0f;
     float gustPendingDuration = 0.0f;
 
-    // ===== 消息盒 =====
-    std::vector<Msg> msgs;
-    float msgClock = 0.0f;
+    // ===== 消息盒（第 5 期抽成独立类：闪烁/常驻状态机与绘制几何自成一格）=====
+    WeatherMsgBox msgBox_;
 
     // ===== 天色 / 雨强 =====
     std::shared_ptr<Sprite> stormScrimSprite;
     float scrimAlpha = 0.0f;
     float scrimTargetAlpha = 0.0f;
     float rainBaseline = 0.70f;
+
+    const Config* cfg_ = nullptr; // 预警绘制与遮罩几何（Init 注入，生命周期长于本对象）
 
     // ===== 雨/雷/风（方案一：渲染器注册表 + 槽位分发表）=====
     std::shared_ptr<RainSystem> rainSystem;

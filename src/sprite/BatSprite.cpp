@@ -1,4 +1,3 @@
-#include "app/Services.h"
 #include "sprite/BatSprite.h"
 #include "core/Input.h"
 #include "core/Config.h"
@@ -11,16 +10,16 @@
 #include <algorithm>
 #include <cmath>
 
-BatSprite::BatSprite(std::shared_ptr<Texture2D> texture) : Sprite(texture) 
+BatSprite::BatSprite(std::shared_ptr<Texture2D> texture, ResourceManager& res, const Config& cfg) : Sprite(texture)
 {
     // 初始化飞行动画
     std::cout << "init bat fly sheet \n";
-    auto flySpriteSheet = Services::Get().Res().GetTexture2D("batFlySheet");
+    auto flySpriteSheet = res.GetTexture2D("batFlySheet");
     flyAnimation = std::make_unique<Animation>(true, false); 
     flyAnimation->InitAnimationUV(flySpriteSheet, 4);
 
     std::cout << "init bat dead sheet \n";
-    auto deadSpriteSheet = Services::Get().Res().GetTexture2D("batDeadSheet");
+    auto deadSpriteSheet = res.GetTexture2D("batDeadSheet");
     deadAnimation = std::make_unique<Animation>(false, true);
     deadAnimation->InitAnimationUV(deadSpriteSheet, 7);
 
@@ -28,7 +27,7 @@ BatSprite::BatSprite(std::shared_ptr<Texture2D> texture) : Sprite(texture)
     animation = std::move(flyAnimation); // 设置当前动画为飞行动画
 
     std::cout << "load config \n";
-    LoadParamsFromConfig(); // 从配置加载参数
+    LoadParamsFromConfig(cfg); // 从配置加载参数
 }
 
 void BatSprite::Update(float dt) {
@@ -158,17 +157,17 @@ void BatSprite::SwitchToAnimation(int animIndex) {
     }
 }
 
-void BatSprite::LoadParamsFromConfig() {
-    gravity = Services::Get().Cfg().GetGravity();
-    jumpStrength = Services::Get().Cfg().GetFlapStrength();
+void BatSprite::LoadParamsFromConfig(const Config& cfg) {
+    gravity = cfg.GetGravity();
+    jumpStrength = cfg.GetFlapStrength();
     // 横向活动边界：窗口内侧留出半身位余量（蝙蝠 64px）
-    float screenWidth = (float)Services::Get().Cfg().GetScreenWidth();
+    float screenWidth = (float)cfg.GetScreenWidth();
     xBoundMin = 40.0f;
     xBoundMax = screenWidth - 40.0f;
     // 纵向活动边界：与 MainScene::CollisionDetect 的撞地/撞顶致死线重合
     // （地面线 terrain_height + 触边半高，天花板线 屏高 - 触边半高）
-    yBoundMin = Services::Get().Cfg().GetTerrainHeight() + EdgeContactMargin;
-    yBoundMax = (float)Services::Get().Cfg().GetScreenHeight() - EdgeContactMargin;
+    yBoundMin = cfg.GetTerrainHeight() + EdgeContactMargin;
+    yBoundMax = (float)cfg.GetScreenHeight() - EdgeContactMargin;
 }
 
 BatSprite::~BatSprite() {

@@ -7,17 +7,22 @@ enum class BatState {
     Dead
 };
 
+class Config;
+class ResourceManager;
+
 class BatSprite : public Sprite {
 public:
     BatSprite() = default;
     ~BatSprite();
-    explicit BatSprite(std::shared_ptr<Texture2D> texture);
+    // 配置在构造时注入：重力/振翅/活动边界全部来自 Config，
+    // 精灵自身不再持有全局访问点（可由自测直接构造并断言边界）。
+    BatSprite(std::shared_ptr<Texture2D> texture, ResourceManager& res, const Config& cfg);
 
     void Update(float dt) override;
 
     void SwitchToAnimation(int animIndex) override;
 
-    void LoadParamsFromConfig();
+    void LoadParamsFromConfig(const Config& cfg);
 
     bool GetHitState() const;
 

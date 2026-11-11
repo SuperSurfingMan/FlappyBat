@@ -1,6 +1,4 @@
-#include "app/Services.h"
 #include "scene/stage/FeedbackFx.h"
-#include "core/Config.h"
 #include "ui/UIBuilder.h"
 #include "ui/UITheme.h"
 #include "imgui.h"
@@ -53,12 +51,12 @@ bool FeedbackFx::ShakeOffset(float& offX, float& offY) const {
     return true;
 }
 
-void FeedbackFx::Draw() const {
+void FeedbackFx::Draw(float screenH) const {
     if (floatingTexts.empty()) return;
     ImFont* font = UIBuilder::GetFont();
     if (!font) return;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
+    const float WIN_HEIGHT = screenH;
     for (const auto& ft : floatingTexts) {
         float alpha = std::clamp(ft.life / ft.totalLife, 0.0f, 1.0f);
         ImVec2 ts = UIBuilder::CalcTextSize(ft.text, ft.fontSize);

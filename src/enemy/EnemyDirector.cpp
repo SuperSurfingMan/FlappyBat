@@ -4,8 +4,8 @@ void EnemyDirector::Register(std::shared_ptr<IEnemy> enemy) {
     enemies_.push_back(std::move(enemy));
 }
 
-void EnemyDirector::InitAll() {
-    for (auto& e : enemies_) e->Init();
+void EnemyDirector::InitAll(const Config& cfg, ResourceManager& res) {
+    for (auto& e : enemies_) e->Init(cfg, res);
 }
 
 void EnemyDirector::OnRunStart() {

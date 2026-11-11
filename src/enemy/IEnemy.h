@@ -5,6 +5,8 @@
 
 class Sprite;
 class SpriteRenderer;
+class Config;
+class ResourceManager;
 struct IFeedbackFx;      // 角色接口：纯表现
 struct IRunEconomy;      // 角色接口：结算通道
 struct IPlayerCommands;  // 角色接口：玩家权威操作
@@ -77,7 +79,9 @@ public:
     virtual EnemyId Id() const = 0;
 
     // ---- 生命周期（导演统一驱动；暂停/入场冻结由场景门控 Update 调用保证）----
-    virtual void Init() = 0;          // 建精灵/对象池（ResourceManager 纹理已就绪）
+    // 建精灵/对象池（纹理已就绪）。配置与资源由导演注入：
+    // 怪物不在业务代码里查全局服务，装配关系在 IEnemy 契约上一眼可见。
+    virtual void Init(const Config& cfg, ResourceManager& res) = 0;
     virtual void OnRunStart() = 0;    // 重开一局：完全复位
     virtual void OnBatDead() = 0;     // 蝙蝠死亡：即时复位（段落中止）
 

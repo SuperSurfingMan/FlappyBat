@@ -1,4 +1,3 @@
-#include "app/Services.h"
 #include "enemy/owlking/OwlKing.h"
 #include "sprite/Sprite.h"
 #include "render/Texture2D.h"
@@ -87,8 +86,10 @@ std::string OwlKing::ArtKey(const char* legacyKey) {
     return (s_artBatch == ArtBatch::Vector) ? std::string(legacyKey) + "_vec" : std::string(legacyKey);
 }
 
-void OwlKing::Init() {
-    auto& rm = Services::Get().Res();
+void OwlKing::Init(const Config& cfg, ResourceManager& res) {
+    cfg_ = &cfg;
+    res_ = &res;
+    auto& rm = res;
     LoadArtBatchPref(); // 进入游戏前读批次偏好（静态开关，设置页可再切）
 
     // 枭王本体：初始为拍翼循环（透明底 2x5 网格 10 帧；后续由动画状态机按状态切表）

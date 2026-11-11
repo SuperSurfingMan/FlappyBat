@@ -9,6 +9,8 @@
 
 class Sprite;
 class SpriteRenderer;
+class ResourceManager;
+class AudioSystem;
 
 // =============================================================================
 // 道具场：蚊子 / 萤火虫 / 猕猴桃三类对象池 + 走廊生成策略 + 拾取判定 +
@@ -26,7 +28,8 @@ public:
     using Effect = ItemEffect; // 兼容既有 ItemField::Effect 引用
     static const Effect& EffectOf(int itemType);
 
-    void Load();
+    // 资源与音频由场景注入：道具池只认这两者，不查全局表
+    void Load(ResourceManager& res, AudioSystem& audio);
     void Reset();
     void Update(float dt, const StageFrame& f);
     void Render(SpriteRenderer& renderer);
@@ -65,6 +68,8 @@ private:
 
     std::function<void(int)> onPickup_;
     std::function<void()> onGiantOrb_;
+
+    AudioSystem* audio_ = nullptr; // 拾取音效（由 Load 注入；nullptr 时静音）
 
     std::vector<std::shared_ptr<Sprite>>* Pool(int type);
     std::array<bool, ItemPoolCap>* Used(int type);

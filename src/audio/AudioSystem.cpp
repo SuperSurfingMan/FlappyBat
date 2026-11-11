@@ -98,14 +98,22 @@ void AudioSystem::StopBGM()
 
 void AudioSystem::PauseBGM()
 {
-    if (m_bgm)
-        ma_sound_stop(m_bgm.get());
+    if (!m_bgm) return;
+    // ma_sound_stop 保留播放游标，后续 ResumeBGM 可从原位置续播（区别于 StopBGM 的销毁重载）
+    ma_sound_stop(m_bgm.get());
+    std::cout << "[Audio] BGM paused" << std::endl;
 }
 
 void AudioSystem::ResumeBGM()
 {
-    if (m_bgm)
-        ma_sound_start(m_bgm.get());
+    if (!m_bgm) return;
+    ma_sound_start(m_bgm.get());
+    std::cout << "[Audio] BGM resumed" << std::endl;
+}
+
+bool AudioSystem::IsBGMPlaying() const
+{
+    return m_bgm && ma_sound_is_playing(m_bgm.get()) != MA_FALSE;
 }
 
 void AudioSystem::PlaySFX(const std::string& file, float volume)

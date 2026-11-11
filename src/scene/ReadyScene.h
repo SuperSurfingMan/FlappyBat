@@ -10,10 +10,11 @@
 
 class Sprite;
 class ButtonSprite;
+class Services;
 
 class ReadyScene : public Scene, public IGameInputSink {
 public:
-    ReadyScene();
+    explicit ReadyScene(Services& svc_);
     ~ReadyScene();
 
     void OnEnter() override;
@@ -26,6 +27,8 @@ public:
     void OnGameInput(const GameInputFrame& frame) override { gameInput = frame; }
 
 private:
+    Services& svc_; // 组合根下发的服务聚合（构造期注入，生命周期长于本场景）
+
     // 本帧输入快照（由 OnGameInput 推送；Update 只读它，不再询设备）
     GameInputFrame gameInput;
 
@@ -62,11 +65,8 @@ private:
     // 光标停留在整行横向区域内维持分裂，离开区域后平滑收缩回单按钮；
     // 悬停单个模式按钮 0.5s -> 光标旁淡入极小解释框；点击模式按钮（点击音效由 UISystem 集中播放）
     // 开始对应模式，点击后保持分裂状态直到转场切场景（返回主菜单时由 Reset 复位）。
-    static constexpr float StartBtnY = 600.0f;     // 开始按钮行中心 y（InitButtons 布局共用）
-    static constexpr float ModeSubBtnW = 112.0f;   // 分裂后单个模式按钮宽
-    static constexpr float ModeSubBtnGap = 10.0f;  // 模式按钮间距
-    static constexpr float SplitHoverDelay = 0.2f; // 开始按钮悬停多久后分裂
-    static constexpr float TipHoverDelay = 0.5f;   // 模式按钮悬停多久后弹出解释框
+    // 布局常量（开始按钮 y / 模式按钮宽与间距 / 悬停阈值）已集中到
+    // ReadySceneLayout.h，三个翻译单元共用同一份几何。
     bool  splitOpen = false;          // 目标状态：true = 分裂展开
     float modeSplitProgress = 0.0f;   // 分裂进度（0 合并 ~ 1 完全分裂，双向动画）
     float rowHoverTimer = 0.0f;       // 开始按钮/横向区域悬停计时

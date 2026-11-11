@@ -12,23 +12,38 @@ class SceneManager;
 class Application;
 
 // =============================================================================
-// 统一服务上下文（第 3 期）。
+// 服务聚合（第 5 期：静态访问点退场）
 //
-// 过去 8 个全局单例（Config / AudioSystem / ResourceManager / ScoreRank /
-// Achievements / PlayerProfile / UISystem / SceneManager）以各自的静态
-// Get()/Instance() 散落在 30+ 个文件里：依赖关系不可见、构造顺序隐式、
-// 无法整体替换实现。现在由组合根在 Services::Install() 里一次性显式装配，
-// 所有调用点只认这一个访问点。
+// 第 3 期引入的 Services 是"Service Locator 过渡形态"——调用点统一了，
+// 但访问点仍是全局静态函数：谁在用谁、构造顺序如何，只能靠读实现。
 //
-// 这是「Service Locator 过渡形态」而非终点：下一步可把 Services 引用作为
-// 构造参数注入场景/子系统，届时只需改各类的构造函数，业务调用点零改动。
-// 未装配时访问会在 Debug 下断言失败，避免隐式空指针崩在别处。
+// 现在本类是一个**普通对象**：由组合根（main）在栈上构造，再把引用显式下发。
+//   main -> Application::Init(Services&)
+//        -> 场景构造参数（ReadyScene / MainScene / ...）
+//        -> 图层构造参数（MainSceneUILayer / MainSceneOverLayer）
+//        -> 子系统的 Init/构造参数（WeatherDirector / PlayerAbilities / ...）
+//
+// 服务实例本身仍是进程级单例（Config / AudioSystem / ... 的生命周期与进程一致，
+// 且存档类必须在任何场景之前就位），但"访问路径"已从全局函数改为对象引用：
+// 依赖关系出现在构造函数签名里，测试可以整组替换，也不会再出现
+// "某个类在静态初始化期偷偷构造了一个服务"的隐式顺序。
+//
+// 只装配不拥有：本类持有裸引用，不负责析构任何服务。
 // =============================================================================
 class Services {
 public:
-    static Services& Get();
-    static void Install();        // 组合根：取各服务实例并登记（幂等）
-    static bool IsInstalled();
+    Services(Config& cfg,
+             AudioSystem& audio,
+             ResourceManager& res,
+             ScoreRank& scores,
+             Achievements& ach,
+             PlayerProfile& profile,
+             UISystem& ui,
+             SceneManager& scenes,
+             Application& app);
+
+    Services(const Services&) = delete;
+    Services& operator=(const Services&) = delete;
 
     Config&          Cfg();
     AudioSystem&     Audio();
@@ -41,22 +56,13 @@ public:
     Application&     App();
 
 private:
-    Services() = default;
-
-    template <typename T>
-    static T& Require(T* p) {
-        assert(p && "Services::Install() 未调用：组合根必须先装配服务上下文");
-        return *p;
-    }
-
-    Config*          cfg_     = nullptr;
-    AudioSystem*     audio_   = nullptr;
-    ResourceManager* res_     = nullptr;
-    ScoreRank*       scores_  = nullptr;
-    Achievements*    ach_     = nullptr;
-    PlayerProfile*   profile_ = nullptr;
-    UISystem*        ui_      = nullptr;
-    SceneManager*    scenes_  = nullptr;
-    Application*     app_     = nullptr;
-    bool             installed_ = false;
+    Config*          cfg_;
+    AudioSystem*     audio_;
+    ResourceManager* res_;
+    ScoreRank*       scores_;
+    Achievements*    ach_;
+    PlayerProfile*   profile_;
+    UISystem*        ui_;
+    SceneManager*    scenes_;
+    Application*     app_;
 };

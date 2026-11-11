@@ -56,7 +56,7 @@ public:
     static ArtBatch GetArtBatch();             // 当前批次
     static void     LoadArtBatchPref();        // 从统一存档读偏好（Init 前调用）
 
-    void Init() override;
+    void Init(const class Config& cfg, class ResourceManager& res) override;
     void OnRunStart() override;
     void OnBatDead() override;
     void Update(float dt, const EnemyContext& ctx) override;
@@ -123,6 +123,10 @@ private:
     // 测试开关：三阶段技能必定选取 B6 血月坠羽（绕过不重复规则），仅强制复验 B6 时置 true。
     // 已验收关闭（false）——B5 雷暴召唤回到三阶段技能池，StormCall 抬翼姿态动画随之生效
     static constexpr bool  TestForceBloodRain = false;
+
+    // 组合根注入（Init 一次，生命周期长于本实例）：窗口几何与美术资源查表
+    const class Config* cfg_ = nullptr;
+    class ResourceManager* res_ = nullptr;
 
     // ===== 状态机 =====
     enum class Phase { Hidden, Warning, Engagement, Defeat, Leave };

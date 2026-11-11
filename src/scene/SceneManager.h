@@ -1,5 +1,4 @@
 #pragma once
-#include "app/Services.h"
 #include "scene/Scene.h"
 #include "scene/SceneKey.h"
 #include "scene/SceneArgs.h"
@@ -14,7 +13,7 @@
 // 职责边界：
 //   1. 注册表：SceneKey -> 场景实例（由 Application 构造各场景后 Register）；
 //   2. 切场：场景只发意图 RequestScene(SceneKey, args, style)，不再认识目标场景
-//      的具体类型，也不再拼接 Services::Get().App().GetScene(...) 样板；
+//      的具体类型，也不再拼接「从全局取 App 再取场景」的样板；
 //   3. 转场：持有一个 ISceneTransition 策略对象（本对象生命周期长于场景，
 //      是"遮罩状态跨场景延续"的正确所有者）。帧循环经 TickTransition 驱动，
 //      于 ReadyToSwitch 中点换景；覆盖层经 DrawTransitionOverlay 绘制在场景之后。
@@ -27,15 +26,16 @@
 // =============================================================================
 class SceneManager {
 public:
-    static SceneManager& Instance() {
-        static SceneManager instance; // 初始场景为 nullptr，后续通过 ChangeScene/RequestScene 设置
-        return instance;
-    }
-
+    // 第 5 期：不再有 Instance() 静态访问点——本对象由组合根在栈上持有，
+    // 与 main 同生命周期（比所有场景长，比服务单例短），引用经 Services 下发。
+    SceneManager();
     ~SceneManager();
 
     SceneManager(const SceneManager&) = delete;
     SceneManager& operator=(const SceneManager&) = delete;
+
+    // ===== 视口尺寸（组合根注入；仅用于转场默认聚焦锚点）=====
+    void SetViewportSize(float w, float h) { viewportW_ = w; viewportH_ = h; }
 
     // ===== 场景注册表 =====
     void Register(SceneKey id, std::shared_ptr<Scene> scene);
@@ -66,8 +66,6 @@ public:
     void ExitCurrentScene();
 
 private:
-    SceneManager();
-
     // 换景执行体：OnExit(旧) -> OnPrepare -> Reset -> OnEnter（见类注释时序）
     void SwapScene(std::shared_ptr<Scene> nextScene, const SceneArgs& args);
     std::shared_ptr<Scene> Resolve(SceneKey id) const;
@@ -78,6 +76,8 @@ private:
     // ===== 注册表与转场续态 =====
     std::map<SceneKey, std::shared_ptr<Scene>> registry;
     std::map<TransitionKey, TransitionFactory> transitionFactories;
+    float viewportW_ = 0.0f;
+    float viewportH_ = 0.0f;
     std::unique_ptr<ISceneTransition> transition; // 跨场景存活的转场策略（空 = 无转场）
     std::shared_ptr<Scene> pendingScene;          // ReadyToSwitch 时待换入的场景
     SceneArgs pendingArgs;                        // 及其启动参数

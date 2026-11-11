@@ -11,10 +11,11 @@
 class Sprite;
 class ButtonSprite;
 class ToastLayer;
+class Services;
 
 class ScoreRankScene : public Scene {
 public:
-    ScoreRankScene();
+    explicit ScoreRankScene(Services& svc_);
     ~ScoreRankScene();
 
     void OnEnter() override;
@@ -24,6 +25,8 @@ public:
     void Reset() override;
 
 private:
+    Services& svc_; // 构造期注入的服务聚合
+
     std::shared_ptr<ButtonSprite> backToReady;
     std::shared_ptr<ButtonSprite> syncAndLoad;
     std::shared_ptr<ButtonSprite> clearRecords;   // 清空记录（危险操作入口）

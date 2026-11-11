@@ -25,14 +25,9 @@
 #include <algorithm>
 #include <iostream>
 
-Application& Application::Get()
+bool Application::Init(Services& svc, int width, int height, const char* title)
 {
-    static Application instance;
-    return instance;
-}
-
-bool Application::Init(int width, int height, const char* title)
-{
+    services = &svc;
     if (!glfwInit()) {
         std::cerr << "GLFW INIT Failed..." << std::endl;
         return false;
@@ -75,13 +70,14 @@ bool Application::Init(int width, int height, const char* title)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Audio System
-    if (!Services::Get().Audio().Init())
+    if (!services->Audio().Init())
     {
         std::cerr << "Failed to init AudioSystem\n";
         return false;
     }
 
-    // 把窗口关闭事件接入引擎
+    // 把窗口关闭事件接入引擎：回调通过 user pointer 取回本对象（多窗口也成立）
+    glfwSetWindowUserPointer(window, this);
     glfwSetWindowCloseCallback(window, GLFWCloseCallback);
 
     lastTime = (float)glfwGetTime();
@@ -89,7 +85,7 @@ bool Application::Init(int width, int height, const char* title)
     std::cout << "Resource manager initalizing... \n";
 
     // 仅构建加载队列（轻量）；实际资源加载延后到主循环，与 BootScene 并行执行
-    Services::Get().Res().Init();
+    services->Res().Init(services->Cfg());
 
     // 注意：其它场景（Ready/Main/ScoreRank）的构造延后到资源加载完成后，见 Run() 主循环
 
@@ -100,7 +96,10 @@ bool Application::Init(int width, int height, const char* title)
 void Application::SetSystems(SceneManager* sm, SpriteRenderer* sr)
 {
     sceneManager = sm;
-    bootScene = std::make_shared<BootScene>();
+    // 转场默认聚焦锚点与 UI 集中反馈音效：装配点收敛在组合根
+    sceneManager->SetViewportSize((float)services->Cfg().GetScreenWidth(),
+                                  (float)services->Cfg().GetScreenHeight());
+    bootScene = std::make_shared<BootScene>(*services);
     sm->Register(kSceneBoot, bootScene);
     sm->ChangeScene(bootScene);
     spriteRenderer = sr;
@@ -108,16 +107,18 @@ void Application::SetSystems(SceneManager* sm, SpriteRenderer* sr)
 
 void Application::GLFWCloseCallback(GLFWwindow* window)
 {
-    Services::Get().App().RequestQuit();
+    if (auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window)))
+        app->RequestQuit();
 }
 
 void Application::InitScenes() {
     // 场景构造后登记进 SceneManager 注册表；此后所有切场均以 SceneKey 寻址
-    sceneManager->Register(kSceneReady,       std::make_shared<ReadyScene>());
-    sceneManager->Register(kSceneMain,        std::make_shared<MainScene>());
-    sceneManager->Register(kSceneScoreRank,   std::make_shared<ScoreRankScene>());
-    sceneManager->Register(kSceneAchievements,std::make_shared<AchievementsScene>());
-    sceneManager->Register(kSceneSettings,    std::make_shared<SettingsScene>());
+    // 场景以 Services& 构造：依赖在装配处一次给全，场景内部不再查全局
+    sceneManager->Register(kSceneReady,       std::make_shared<ReadyScene>(*services));
+    sceneManager->Register(kSceneMain,        std::make_shared<MainScene>(*services));
+    sceneManager->Register(kSceneScoreRank,   std::make_shared<ScoreRankScene>(*services));
+    sceneManager->Register(kSceneAchievements,std::make_shared<AchievementsScene>(*services));
+    sceneManager->Register(kSceneSettings,    std::make_shared<SettingsScene>(*services));
 }
 
 void Application::RequestQuit()
@@ -134,13 +135,13 @@ void Application::Run()
 {
     float projection[16];
     Ortho(
-        0.0f, (float)Services::Get().Cfg().GetScreenWidth(),
-        0.0f, (float)Services::Get().Cfg().GetScreenHeight(),
+        0.0f, (float)services->Cfg().GetScreenWidth(),
+        0.0f, (float)services->Cfg().GetScreenHeight(),
         projection
     );
     spriteRenderer->SetProjection(projection);
-    Services::Get().Audio().PlayBGM("assets/Audio/Music/Background Music.mp3");
-    Services::Get().Audio().SetMasterVolume(1.f);
+    services->Audio().PlayBGM("assets/Audio/Music/Background Music.mp3");
+    services->Audio().SetMasterVolume(1.f);
 
     int frameCount = 0;
     float fpsTimer = 0.0f;
@@ -193,9 +194,9 @@ void Application::Run()
 
         // ===== 异步资源加载（与 BootScene 完全并行） =====
         // 后台线程做 IO+解码，主线程每帧只上传几张纹理 + 至多一个收尾任务，帧率不受影响
-        if (!Services::Get().Res().IsLoadingComplete()) {
-            Services::Get().Res().UpdateLoading();
-            if (Services::Get().Res().IsLoadingComplete()) {
+        if (!services->Res().IsLoadingComplete()) {
+            services->Res().UpdateLoading();
+            if (services->Res().IsLoadingComplete()) {
                 InitScenes(); // 资源就绪后，再构造依赖资源的其它场景
                 std::cout << "All resources loaded; scenes initialized. \n";
             }
@@ -205,18 +206,18 @@ void Application::Run()
 
         // ===== UI 事件派发：每帧一次集中命中判定，先于场景逻辑 =====
         // 控件不再自行轮询鼠标；Dispatch 之后本帧的鼠标归属与"按键是否被 UI 消费"已确定
-        Services::Get().UI().BeginFrame(dt);
+        services->UI().BeginFrame(dt);
         // 全屏交互闸门：转场进行中冻结一切控件交互（值在本帧派发前同步）
-        Services::Get().UI().SetInteractionBlocked(sceneManager->IsTransitionActive());
-        Services::Get().UI().Dispatch();
+        services->UI().SetInteractionBlocked(sceneManager->IsTransitionActive());
+        services->UI().Dispatch();
 
-        Services::Get().Audio().Update(); // 更新音频系统，清理已完成的音效
+        services->Audio().Update(); // 更新音频系统，清理已完成的音效
         sceneManager->TickTransition(dt); // 转场推进与遮蔽中点换景（先于场景逻辑，切幕当帧即新场景接管）
         sceneManager->GetCurrentScene()->Update(dt);
         sceneManager->GetCurrentScene()->Render(*spriteRenderer);
         sceneManager->DrawTransitionOverlay(); // 转场覆盖层最后追加：永远压在场景与 HUD 之上
 
-        Services::Get().UI().EndFrame();
+        services->UI().EndFrame();
 
         spriteRenderer->End();
 
@@ -233,8 +234,8 @@ void Application::Run()
     // 这些后构造的单例已被销毁（逆序析构），访问已析构对象 → Segmentation Fault
     sceneManager->ExitCurrentScene();
 
-    Services::Get().Res().Shutdown(); // 回收后台加载线程（加载中途退出也安全）
-    Services::Get().Audio().Shutdown();
+    services->Res().Shutdown(); // 回收后台加载线程（加载中途退出也安全）
+    services->Audio().Shutdown();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

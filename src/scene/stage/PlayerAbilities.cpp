@@ -1,4 +1,3 @@
-#include "app/Services.h"
 #include "scene/stage/PlayerAbilities.h"
 #include "core/Config.h"
 #include "sprite/BatSprite.h"
@@ -11,9 +10,12 @@
 #include <cmath>
 #include <iostream>
 
-void PlayerAbilities::Init(std::shared_ptr<BatSprite> b, IFeedbackFx* feedback) {
+void PlayerAbilities::Init(std::shared_ptr<BatSprite> b, IFeedbackFx* feedback,
+                          const Config& cfg, PlayerProfile& profile) {
     bat = std::move(b);
     fx = feedback;
+    cfg_ = &cfg;
+    profile_ = &profile;
 }
 
 void PlayerAbilities::Reset() {
@@ -97,7 +99,7 @@ void PlayerAbilities::AddEnergy(float amount) {
     if (shieldTimer > 0.0f) return; // 护盾生效期间不积攒
     // B8：充能速度升级提升所有能量获取
     const float mult = 1.0f + ChargeMultPerLevel *
-        (float)Services::Get().Profile().GetLevel(PlayerProfile::ShieldTrack::Charge);
+        (float)profile_->GetLevel(PlayerProfile::ShieldTrack::Charge);
     energy = std::min(1.0f, energy + amount * mult);
 }
 
@@ -145,11 +147,11 @@ void PlayerAbilities::Bounce(float dx, float dy) {
 
 void PlayerAbilities::ActivateGiant() {
     if (!bat) return;
-    float batSize = Services::Get().Cfg().GetBatSize();
+    float batSize = cfg_->GetBatSize();
     bat->SetScale(batSize * GiantScaleFactor, batSize * GiantScaleFactor);
     TryReleaseShield(GiantDuration); // 巨化无敌经统一入口授予（免费语义）
     giantTimer = GiantDuration;
-    Services::Get().Profile().AddCoins(5); // 巨化星额外奖励金币（B8）
+    profile_->AddCoins(5); // 巨化星额外奖励金币（B8）
     if (fx) {
         fx->PlaySFX((int)SFX::Record, 1.0f); // 稀有道具登场
         fx->FloatTextAt("巨化！", bat->GetPosition() + Vec2(0.0f, 80.0f),
@@ -162,7 +164,7 @@ void PlayerAbilities::ActivateGiant() {
 void PlayerAbilities::UpdateGiant(float dt) {
     if (giantTimer <= 0.0f || !bat) return;
     giantTimer -= dt;
-    float batSize = Services::Get().Cfg().GetBatSize();
+    float batSize = cfg_->GetBatSize();
 
     if (giantTimer <= 0.0f) {
         giantTimer = 0.01f; // 保持活动语义，由 EndGiant 统一归零并还原体型/无敌
@@ -181,7 +183,7 @@ void PlayerAbilities::UpdateGiant(float dt) {
 void PlayerAbilities::EndGiant() {
     if (giantTimer <= 0.0f || !bat) return;
     giantTimer = 0.0f;
-    float batSize = Services::Get().Cfg().GetBatSize();
+    float batSize = cfg_->GetBatSize();
     bat->SetScale(batSize, batSize);
     if (shieldTimer <= 0.0f)
         bat->SetInvincible(0.01f); // 巨化无敌随效果终止（护盾在身时不清护盾免伤）
@@ -200,7 +202,7 @@ PlayerAbilities::GiantBody PlayerAbilities::Giant() const {
 }
 
 float PlayerAbilities::ShieldDuration() const {
-    int lv = Services::Get().Profile().GetLevel(PlayerProfile::ShieldTrack::Duration);
+    int lv = profile_->GetLevel(PlayerProfile::ShieldTrack::Duration);
     return ShieldBaseDuration + ShieldDurationPerLevel * (float)lv;
 }
 

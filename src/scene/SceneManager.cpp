@@ -1,6 +1,4 @@
-#include "app/Services.h"
 #include "scene/SceneManager.h"
-#include "core/Config.h"
 #include <iostream>
 
 void SceneManager::RegisterTransitionFactory(TransitionKey style,
@@ -58,9 +56,10 @@ void SceneManager::RequestScene(SceneKey id, const SceneArgs& args, TransitionKe
     transition = MakeTransition(style);
     if (transition) {
         TransitionContext ctx;
-        const float w = (float)Services::Get().Cfg().GetScreenWidth();
-        const float h = (float)Services::Get().Cfg().GetScreenHeight();
-        ctx.focusAnchor = args.focusAnchorScreen.value_or(Vec2{ w * 0.5f, h * 0.5f });
+        // 默认聚焦屏幕中心（组合根注入的视口尺寸；未注入时 Chromium 也无从判断，
+        // 这里退化为 0,0 —— 调用方应始终显式传 focusAnchorScreen）
+        ctx.focusAnchor = args.focusAnchorScreen.value_or(
+            Vec2{ viewportW_ * 0.5f, viewportH_ * 0.5f });
         transition->Start(ctx);
     } else {
         pendingScene = nullptr; // 未知样式：按防御处理，不切场

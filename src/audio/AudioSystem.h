@@ -22,6 +22,10 @@ public:
     void StopBGM();
     void PauseBGM();
     void ResumeBGM();
+    // 当前 BGM 是否真的在出声（已加载且未暂停）。
+    // 存在意义：暂停/恢复只是两次引擎调用，仅凭调用点无法判断是否真的静音，
+    // 调试与自测需要可观测的音频状态。
+    bool IsBGMPlaying() const;
 
     // ========= SFX =========
     void PlaySFX(const std::string& file, float volume = 1.0f);

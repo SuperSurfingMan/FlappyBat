@@ -1,13 +1,12 @@
-#include "app/Services.h"
 #include "scene/stage/ParallaxField.h"
 
 #include "res/ResourceManager.h"
 #include "sprite/Sprite.h"
 
-void ParallaxField::Load() {
-    background_ = Services::Get().Res().GetSpriteList("background");
-    foreground_ = Services::Get().Res().GetSpriteList("foreground");
-    terrain_ = Services::Get().Res().GetSpriteList("terrain");
+void ParallaxField::Load(ResourceManager& res) {
+    background_ = res.GetSpriteList("background");
+    foreground_ = res.GetSpriteList("foreground");
+    terrain_ = res.GetSpriteList("terrain");
 }
 
 void ParallaxField::LayoutStrip(std::vector<std::shared_ptr<Sprite>>& strip, float x0, float y) {

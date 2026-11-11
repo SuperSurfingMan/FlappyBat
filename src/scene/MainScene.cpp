@@ -43,7 +43,10 @@ constexpr int kLayerMainHud = 12;
 // 第 2 期：RankMode 枚举与 ToRankMode 映射已移除。
 // ScoreRank 直接接收 ModeKey 并向 ModeRegistry 查注册序，新增模式无需任何映射。
 
-MainScene::MainScene()
+MainScene::MainScene(Services& services)
+    : svc_(services),
+      terrain_render_height(services.Cfg().GetTerrainRenderHeight()),
+      terrain_height(services.Cfg().GetTerrainHeight())
 {
     LoadSpritesFromResourceManager();
 
@@ -57,29 +60,30 @@ MainScene::MainScene()
     });
 
     // 天气子系统：取 RainSystem、初始化雨/雷/风渲染器与天色遮罩
-    weather.Init();
+    weather.Init(svc_.Cfg(), svc_.Res(), svc_.Audio());
 
     // 玩家能力子系统：共享蝙蝠精灵，上行反馈只依赖表现接口（IFeedbackFx）
-    player.Init(std::static_pointer_cast<BatSprite>(bat), this);
+    player.Init(std::static_pointer_cast<BatSprite>(bat), this,
+                svc_.Cfg(), svc_.Profile());
 
     // 怪物（EnemyDirector 框架）：登记内置怪物并初始化（纹理已在资源加载阶段就绪）
     RegisterBuiltinEnemies(enemies);
-    enemies.InitAll();
+    enemies.InitAll(svc_.Cfg(), svc_.Res());
 
-    mainSceneUILayer = std::make_shared<MainSceneUILayer>();
-    mainSceneOverLayer = std::make_shared<MainSceneOverLayer>();
+    mainSceneUILayer = std::make_shared<MainSceneUILayer>(svc_);
+    mainSceneOverLayer = std::make_shared<MainSceneOverLayer>(svc_);
 
     // ===== 局内 HUD 交互控件：能量图标热区 =====
     // 命中矩形与绘制几何同源（GetEnergyIconRect）；可点与否由 SetEnabled 逐帧同步，
     // 鼠标判定不再出现在本场景代码里
-    hudGroupId = Services::Get().UI().CreateGroup(kLayerMainHud);
+    hudGroupId = svc_.UI().CreateGroup(kLayerMainHud);
     energyIcon->SetPlayFeedbackSFX(false); // 原实现无音效，保持听感不变
     energyIcon->SetOnClick([this]() { player.TryReleaseShield(); });
-    Services::Get().UI().Add(hudGroupId, energyIcon);
-    energyScope.Bind(hudGroupId, false);
+    svc_.UI().Add(hudGroupId, energyIcon);
+    energyScope.Bind(svc_.UI(), hudGroupId, false);
 
     // 玩法操控的按键集：声明给 UISystem，本场景只读它推送的回帧快照
-    Services::Get().UI().WatchKeys({GLFW_KEY_SPACE, GLFW_KEY_W, GLFW_KEY_UP,
+    svc_.UI().WatchKeys({GLFW_KEY_SPACE, GLFW_KEY_W, GLFW_KEY_UP,
                                GLFW_KEY_S, GLFW_KEY_DOWN,
                                GLFW_KEY_A, GLFW_KEY_D, GLFW_KEY_LEFT, GLFW_KEY_RIGHT,
                                GLFW_KEY_F});
@@ -87,7 +91,7 @@ MainScene::MainScene()
     // 成就解锁提示（底部居中，带专属面板背景；任何阶段都可能弹出）
     auto achToast = std::make_shared<ToastLayer>(2.5f, "", Vec3{0.941f, 0.722f, 0.314f}, 26.0f,
                                                  Vec2{270.0f, 838.0f});
-    if (auto tex = Services::Get().Res().GetTexture2D("v2_ui_achievement_toast")) {
+    if (auto tex = svc_.Res().GetTexture2D("v2_ui_achievement_toast")) {
         achToast->SetBackground(tex);
     }
     achievementToast = achToast;
@@ -120,7 +124,7 @@ void MainScene::OnEnter()
 {
     // 接管玩法输入推送（OnExit 注销：非当前场景不应再收到回帧）
     // 同时为 UI 图层注册一份订阅：它只读暂停快捷键（ESC/P/R），与玩法 sink 并存
-    UISystem& ui = Services::Get().UI();
+    UISystem& ui = svc_.UI();
     ui.AddGameInputSink(this);
     overlayLayers.AttachAll(); // UI 层订阅输入；结算/Toast 回到未激活状态
 
@@ -129,8 +133,14 @@ void MainScene::OnEnter()
     mainSceneUILayer->SetRenderEnabled(!flow.IsGameOver());
     SetHudInteractive(false); // 能量图标 + UI 层输入同步收起
 
-    // 开始循环播放雨声环境音（均匀、平缓）
-    Services::Get().Audio().PlayAmbient("assets/Audio/Sound Effects/Rain.wav", true, 0.4f);
+    // ===== 局内音频：只有雨声，没有背景音乐 =====
+    // 背景音乐由组合根在启动时统一起播（Application::Init），此处暂停它。
+    // 用暂停而非停止：ma_sound 保留播放游标，离开局内时从原位置续播，
+    // 不会因为每局进出都把曲子重头放一遍。Pause/Resume 均幂等，
+    // 局内重开（Reset + OnEnter，不经 SceneManager）重复调用也安全。
+    AudioSystem& audio = svc_.Audio();
+    audio.PauseBGM();
+    audio.PlayAmbient("assets/Audio/Sound Effects/Rain.wav", true, 0.4f);
     weather.OnEnter(params().lightningWarnLead); // 落雷预警提前量（随模式差异化）
     weather.ApplyForTier(GetCurrentDifficultyTier(), params()); // 天气基线（A4-c；场景切换前已 Reset，此处为第 0 档）
 
@@ -144,10 +154,10 @@ void MainScene::OnEnter()
     // 入场流程：从准备界面"开始游戏"进入时转场仍在全屏接管（先揭示后倒数）；
     // 局内重开无转场，直接 3-2-1 倒数。开局无敌改由倒数结束时统一给予。
     // 本场景只查询 SceneManager 的接管状态，不认识任何具体转场实现
-    const bool maskActive = Services::Get().Scenes().IsTransitionActive();
+    const bool maskActive = svc_.Scenes().IsTransitionActive();
     flow.OnEnter(maskActive);
     if (!maskActive) {
-        Services::Get().Audio().PlaySFX(SFXToFile(SFX::Countdown), 0.5f);
+        svc_.Audio().PlaySFX(SFXToFile(SFX::Countdown), 0.5f);
     }
 }
 
@@ -160,11 +170,13 @@ void MainScene::OnPrepare(const SceneArgs& args)
 
 void MainScene::OnExit()
 {
-    // 停止雨声环境音
-    Services::Get().Audio().StopAmbient();
+    // 局内音频收尾：停雨声，恢复菜单背景音乐（从 OnEnter 暂停的位置续播）
+    AudioSystem& audio = svc_.Audio();
+    audio.StopAmbient();
+    audio.ResumeBGM();
 
     // 停止玩法与 UI 快捷键的输入推送
-    UISystem& ui = Services::Get().UI();
+    UISystem& ui = svc_.UI();
     ui.RemoveGameInputSink(this);
 
     // 局内 UI 交互全部关闭：SetHudInteractive 处理能量图标，
@@ -175,13 +187,13 @@ void MainScene::OnExit()
     // 离开主场景（暂停面板"返回主菜单"、右上角 Home、程序退出等）时，
     // 自动把本局分数写入当前模式的排行榜；已保存过（死亡结算）则跳过
     if (!flow.ScoreSaved()) {
-        Services::Get().Scores().UpdateScore(flow.Score(), flow.Mode());
+        svc_.Scores().UpdateScore(flow.Score(), flow.Mode());
         flow.MarkScoreSaved();
         std::cout << "Exit MainScene: score " << flow.Score()
                   << " saved to rank (" << ScoreRank::ModeName(flow.Mode()) << ")." << std::endl;
     }
-    Services::Get().Profile().Save(); // 中途退出也保存金币与升级（局末结算处已另存）
-    Services::Get().Ach().Save(); // 同步落盘累计统计（成就解锁时已即存，此处兜底防中途退出丢失）
+    svc_.Profile().Save(); // 中途退出也保存金币与升级（局末结算处已另存）
+    svc_.Ach().Save(); // 同步落盘累计统计（成就解锁时已即存，此处兜底防中途退出丢失）
 }
 
 void MainScene::Update(float dt)
@@ -232,8 +244,8 @@ void MainScene::Update(float dt)
 
     // 三段视差条带统一推进：地面滚动速度 == 障碍物速度（随难度递进）
     parallax.Scroll(dt,
-                    Services::Get().Cfg().GetBackgroundSpeed(),
-                    Services::Get().Cfg().GetForegroundSpeed(),
+                    svc_.Cfg().GetBackgroundSpeed(),
+                    svc_.Cfg().GetForegroundSpeed(),
                     GetCurrentObstacleSpeed());
     obstacles.Update(dt, frame);    obstacles.UpdateFlying(dt, frame); // 被撞飞障碍的抛物线飞行与回收
     items.Update(dt, frame);           // 道具漂移 + 巨化星
@@ -263,8 +275,8 @@ void MainScene::Update(float dt)
         int tier = 0;
         if (flow.UpdateTier(tier)) {
             weather.ApplyForTier(tier, params()); // 雨强/雷频/天色随档位变化
-            const float WIN_WIDTH = (float)Services::Get().Cfg().GetScreenWidth();
-            const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
+            const float WIN_WIDTH = (float)svc_.Cfg().GetScreenWidth();
+            const float WIN_HEIGHT = (float)svc_.Cfg().GetScreenHeight();
             SpawnFloatText("风暴渐强 · 提速！",
                            Vec2(WIN_WIDTH * 0.5f, WIN_HEIGHT - 70.0f),
                            UITheme::Amber.r, UITheme::Amber.g, UITheme::Amber.b, 28.0f, 2.0f);
@@ -289,8 +301,8 @@ void MainScene::Update(float dt)
         ectx.timeLeft = flow.Timed() ? flow.TimeLeft() : -1.f; // <0 = 非限时
         ectx.mode = flow.Mode();
         ectx.terrainY = terrain_height;
-        ectx.screenW = (float)Services::Get().Cfg().GetScreenWidth();
-        ectx.screenH = (float)Services::Get().Cfg().GetScreenHeight();
+        ectx.screenW = (float)svc_.Cfg().GetScreenWidth();
+        ectx.screenH = (float)svc_.Cfg().GetScreenHeight();
         // 输入意图（取自 UISystem 推送的本帧已裁决快照：悬停在控件上的右键不会下发）
         ectx.firePrimary = gameInput.PointerPressed(GLFW_MOUSE_BUTTON_RIGHT) ||
                            gameInput.Pressed(GLFW_KEY_F);
@@ -327,8 +339,8 @@ void MainScene::Render(SpriteRenderer& renderer)
     // ===== 全局抖动（B6-b 反馈）：平移投影使所有世界渲染跟随震动（ImGui UI 不受影响） =====
     // 抖动投影同源分发给 SpriteRenderer（普通精灵）与 RenderContext（雨/风/闪电），
     // 世界内所有元素一致震动；无抖动时渲染器取标准正交投影
-    const float SW = (float)Services::Get().Cfg().GetScreenWidth();
-    const float SH = (float)Services::Get().Cfg().GetScreenHeight();
+    const float SW = (float)svc_.Cfg().GetScreenWidth();
+    const float SH = (float)svc_.Cfg().GetScreenHeight();
     float offX = 0.0f, offY = 0.0f;
     const bool shaking = fx.ShakeOffset(offX, offY);
 
@@ -393,8 +405,8 @@ void MainScene::Reset()
     enemies.OnRunStart(); // 怪物完全复位（须在下方障碍布局前，避免段落期残留规则抑制道具生成）
     items.Reset();        // 道具池/巨化星归零（须在障碍布局前，走廊生成依赖空池）
 
-    float WIN_WIDTH = Services::Get().Cfg().GetScreenWidth();
-    float WIN_HEIGHT = Services::Get().Cfg().GetScreenHeight();
+    float WIN_WIDTH = svc_.Cfg().GetScreenWidth();
+    float WIN_HEIGHT = svc_.Cfg().GetScreenHeight();
 
     // reset bg position：三段条带按地面高度重新铺排（块数由资源决定）
     parallax.Reset(WIN_WIDTH, WIN_HEIGHT, terrain_height, terrain_render_height);
@@ -407,7 +419,7 @@ void MainScene::Reset()
     // 两场景蝙蝠位置/大小一致，营造"同一只蝙蝠"的连续错觉
     bat->SetPosition(WIN_WIDTH * 0.5f, WIN_HEIGHT * 0.5f + 100.0f);
     std::shared_ptr<BatSprite> batSprite = std::dynamic_pointer_cast<BatSprite>(bat);
-    float batSize = Services::Get().Cfg().GetBatSize();
+    float batSize = svc_.Cfg().GetBatSize();
     bat->SetScale(batSize, batSize); // 巨化中重开时恢复正常尺寸
     batSprite->ResetState();
 
@@ -418,7 +430,7 @@ void MainScene::Reset()
 
     mainSceneUILayer->Reset();
     mainSceneOverLayer->Reset();
-    Services::Get().UI().ClearWidgetState(hudGroupId); // 能量图标残留高亮复位
+    svc_.UI().ClearWidgetState(hudGroupId); // 能量图标残留高亮复位
 }
 
 // 局内 HUD 与顶部按钮排的交互闸门（结算面板组不受影响，由 OverLayer 自管）
@@ -428,11 +440,11 @@ void MainScene::SetHudInteractive(bool interactive) {
 }
 
 void MainScene::LoadSpritesFromResourceManager() {
-    parallax.Load();
-    bat = Services::Get().Res().GetSprite("bat");
+    parallax.Load(svc_.Res());
+    bat = svc_.Res().GetSprite("bat");
 
-    obstacles.Load(Services::Get().Cfg(), Services::Get().Res());
-    items.Load();
+    obstacles.Load(svc_.Cfg(), svc_.Res());
+    items.Load(svc_.Res(), svc_.Audio());
 }
 
 void MainScene::DrawImGUILayout() {
@@ -459,7 +471,7 @@ void MainScene::DrawImGUILayout() {
     weather.DrawLightningWarning(player.PulseClock());
 
     // 拾取/贴脸/跨档飘字（A2/A3）
-    fx.Draw();
+    fx.Draw((float)svc_.Cfg().GetScreenHeight());
 
     // 3-2-1 倒数大字（倒数期间主界面 UI 已弹出）
     hud.DrawCountdown(snap);
@@ -468,7 +480,7 @@ void MainScene::DrawImGUILayout() {
     if (showDebugPanel) {
         ImGui::Begin("Scene Control");
         if (ImGui::Button("Go To Ready Scene")) {
-            Services::Get().Scenes().RequestScene(kSceneReady);
+            svc_.Scenes().RequestScene(kSceneReady);
             std::cout << "Switched to ready scene..." << std::endl;
         }
         if (ImGui::Button("Reset Game")) {
@@ -482,10 +494,10 @@ void MainScene::DrawImGUILayout() {
 StageHud::Snapshot MainScene::BuildHudSnapshot() const {
     StageHud::Snapshot s;
     // 画布尺寸随快照下发：HUD 不再自查全局配置
-    s.screenW = (float)Services::Get().Cfg().GetScreenWidth();
-    s.screenH = (float)Services::Get().Cfg().GetScreenHeight();
+    s.screenW = (float)svc_.Cfg().GetScreenWidth();
+    s.screenH = (float)svc_.Cfg().GetScreenHeight();
     s.score = (int)flow.Score();
-    s.coins = Services::Get().Profile().GetCoins();
+    s.coins = svc_.Profile().GetCoins();
     s.energy = player.Energy();
     s.shieldTimer = player.ShieldTimer();
     s.shieldDuration = player.ShieldDuration();
@@ -510,8 +522,8 @@ StageHud::Snapshot MainScene::BuildHudSnapshot() const {
 StageFrame MainScene::BuildFrame(float dt) const {
     StageFrame f;
     f.dt = dt;
-    f.screenW = (float)Services::Get().Cfg().GetScreenWidth();
-    f.screenH = (float)Services::Get().Cfg().GetScreenHeight();
+    f.screenW = (float)svc_.Cfg().GetScreenWidth();
+    f.screenH = (float)svc_.Cfg().GetScreenHeight();
     f.terrainY = terrain_height;
     if (bat) {
         f.batPos = bat->GetPosition();
@@ -547,13 +559,13 @@ int MainScene::GetCurrentDifficultyTier() const {
 
 float MainScene::GetCurrentObstacleSpeed() const {
     float tier = (float)GetCurrentDifficultyTier();
-    return Services::Get().Cfg().GetObstacleSpeed() *
+    return svc_.Cfg().GetObstacleSpeed() *
            (1.0f + RunFlow::SpeedBonusPerTier * tier) * params().speedFactor;
 }
 
 float MainScene::GetCurrentGapSize() const {
     float tier = (float)GetCurrentDifficultyTier();
-    return Services::Get().Cfg().GetGapSize() * (1.0f - RunFlow::GapShrinkPerTier * tier);
+    return svc_.Cfg().GetGapSize() * (1.0f - RunFlow::GapShrinkPerTier * tier);
 }
 
 // ===== 连击（A3） =====
@@ -578,7 +590,7 @@ void MainScene::OnItemPicked(int itemType) {
     const ItemField::Effect& e = ItemField::EffectOf(itemType);
     if (e.score > 0) AddScore((size_t)e.score);
     if (e.energy > 0.0f) player.AddEnergy(e.energy);
-    Services::Get().Profile().AddCoins(e.coins);
+    svc_.Profile().AddCoins(e.coins);
     ReportAchievement("item_collected", 1);
     SpawnComboBonusText(ApplyPickupComboBonus());
     SpawnFloatText(e.floatText, bat->GetPosition(), e.r, e.g, e.b, e.fontSize);
@@ -596,17 +608,17 @@ void MainScene::SpawnFloatText(const std::string& text, Vec2 worldPos,
 void MainScene::UpdateIntro(float dt) {
     // 遮罩阶段：转场动画由 SceneManager（TickTransition）驱动，本场景只等待其结束；
     // 揭示完毕由 RunFlow 转入 3-2-1
-    const RunFlow::IntroTick ev = flow.TickIntro(dt, Services::Get().Scenes().IsTransitionActive());
+    const RunFlow::IntroTick ev = flow.TickIntro(dt, svc_.Scenes().IsTransitionActive());
     if (ev.becameCounting) {
-        Services::Get().Audio().PlaySFX(SFXToFile(SFX::Countdown), 0.5f);
+        svc_.Audio().PlaySFX(SFXToFile(SFX::Countdown), 0.5f);
     }
     if (ev.countdownAdvanced) {
-        Services::Get().Audio().PlaySFX(SFXToFile(SFX::Countdown), 0.5f); // 新数字出现时滴答
+        svc_.Audio().PlaySFX(SFXToFile(SFX::Countdown), 0.5f); // 新数字出现时滴答
     }
     if (ev.finished) {
         // 正式开始：解锁操控并给予开局保护（经统一入口授予）
         player.TryReleaseShield(100.f);
-        Services::Get().Audio().PlaySFX(SFXToFile(SFX::Start), 0.9f);
+        svc_.Audio().PlaySFX(SFXToFile(SFX::Start), 0.9f);
         SpawnFloatText("开始！", bat->GetPosition() + Vec2(0.0f, 60.0f),
                        UITheme::Amber.r, UITheme::Amber.g, UITheme::Amber.b, 26.0f, 1.2f);
         std::cout << "Intro finished. Game starts." << std::endl;
@@ -625,7 +637,7 @@ void MainScene::RemoveWeatherMsg(int slot) {
 
 void MainScene::RequestLightningStrike(float worldX) {
     // 怪物侧脚本落雷：转发到雨系统既有管线（预警/危险窗/音效/渲染），场景不解释怪物意图
-    if (auto rs = Services::Get().Res().GetRainSystem())
+    if (auto rs = svc_.Res().GetRainSystem())
         rs->TriggerStrikeAt(worldX);
 }
 
@@ -650,14 +662,14 @@ void MainScene::UpdateTimeRush(float dt) {
 // 局末结算（死亡动画结束 / 限时超时共用）：规则与落盘交给 RunSettlement，
 // 本场景只负责把结果演出来（破纪录音效 / 金币飘字 / 结算面板）
 void MainScene::SettleRunResults() {
-    const SettlementResult r = RunSettlement::Apply(flow, Services::Get().Scores(),
-                                                    Services::Get().Profile());
+    const SettlementResult r = RunSettlement::Apply(flow, svc_.Scores(),
+                                                    svc_.Profile());
     if (r.newRecord) {
-        Services::Get().Audio().PlaySFX(SFXToFile(SFX::Record), 1.0f);
+        svc_.Audio().PlaySFX(SFXToFile(SFX::Record), 1.0f);
     }
     if (r.coinBonus > 0) {
-        const float W = (float)Services::Get().Cfg().GetScreenWidth();
-        const float H = (float)Services::Get().Cfg().GetScreenHeight();
+        const float W = (float)svc_.Cfg().GetScreenWidth();
+        const float H = (float)svc_.Cfg().GetScreenHeight();
         SpawnFloatText("金币 +" + std::to_string(r.coinBonus),
                        Vec2(W * 0.5f, H - 240.0f),
                        0.95f, 0.82f, 0.35f, 24.0f, 2.0f);
@@ -671,9 +683,9 @@ void MainScene::SettleRunResults() {
 void MainScene::EndRunByTimeout() {
     if (flow.IsGameOver()) return;
     std::cout << "Time's up! Final score: " << flow.Score() << std::endl;
-    Services::Get().Audio().PlaySFX(SFXToFile(SFX::GameOver), 1.0f);
-    const float WIN_WIDTH = (float)Services::Get().Cfg().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
+    svc_.Audio().PlaySFX(SFXToFile(SFX::GameOver), 1.0f);
+    const float WIN_WIDTH = (float)svc_.Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)svc_.Cfg().GetScreenHeight();
     SpawnFloatText("时间到！", Vec2(WIN_WIDTH * 0.5f, WIN_HEIGHT - 200.0f),
                    UITheme::Amber.r, UITheme::Amber.g, UITheme::Amber.b, 30.0f, 2.0f);
 
@@ -692,7 +704,7 @@ void MainScene::FloatTextAt(const std::string& text, Vec2 pos,
 }
 
 void MainScene::PlaySFX(int sfxId, float volume) {
-    Services::Get().Audio().PlaySFX(SFXToFile(static_cast<SFX>(sfxId)), volume);
+    svc_.Audio().PlaySFX(SFXToFile(static_cast<SFX>(sfxId)), volume);
 }
 
 void MainScene::Shake(float intensity) {
@@ -702,8 +714,8 @@ void MainScene::Shake(float intensity) {
 // PostWeatherMsg/RemoveWeatherMsg 的接口实现即场景既有同名方法，无需另写转发
 
 void MainScene::AddCoins(int n) {
-    Services::Get().Profile().AddCoins((long long)n);
-    Services::Get().Profile().Save(); // 与原击杀奖励路径一致：入账即落盘
+    svc_.Profile().AddCoins((long long)n);
+    svc_.Profile().Save(); // 与原击杀奖励路径一致：入账即落盘
 }
 
 void MainScene::AddTimeLimit(float sec) {
@@ -711,7 +723,7 @@ void MainScene::AddTimeLimit(float sec) {
 }
 
 void MainScene::ReportAchievement(std::string_view eventKey, long long value) {
-    Services::Get().Ach().Report(eventKey, value);
+    svc_.Ach().Report(eventKey, value);
 }
 
 // 统一致死入口（架构设计阶段 0）：碰撞/落雷致死与怪物致死共用同一流程，
@@ -722,7 +734,7 @@ void MainScene::KillPlayer(const char* reason) {
     player.SetLocked(true);        // 死亡后禁止护盾等主动技能
     enemies.OnBatDead();           // 怪物全员复位（段落中止，再降临计时从头开始）
     std::cout << "Killed by " << reason << ". Switching to death animation." << std::endl;
-    Services::Get().Audio().PlaySFX(SFXToFile(SFX::Death), 1.0f);
+    svc_.Audio().PlaySFX(SFXToFile(SFX::Death), 1.0f);
     std::shared_ptr<BatSprite> batSprite = std::dynamic_pointer_cast<BatSprite>(bat);
     if (!batSprite) return;
     batSprite->OnBatHit(); // 死亡动画
@@ -730,7 +742,7 @@ void MainScene::KillPlayer(const char* reason) {
         flow.SetGameOver(true); // 动画结束后设置游戏结束标志
         weather.SetRainScrollSpeed(0.0f); // 地面已静止，水花漂移与地形偏移同步冻结
         SettleRunResults(); // 破纪录音效/写榜/金币结算/结算面板（与超时结算共用）
-        Services::Get().Audio().PlaySFX(SFXToFile(SFX::GameOver), 1.0f);
+        svc_.Audio().PlaySFX(SFXToFile(SFX::GameOver), 1.0f);
         std::cout << "Death animation finished. Game Over." << std::endl;
     });
 }
@@ -769,7 +781,7 @@ void MainScene::TriggerShake(float intensity) {
 
 void MainScene::PollAchievementToasts() {
     AchievementToast toastInfo{};
-    if (!Services::Get().Ach().PopPendingToast(toastInfo)) return;
+    if (!svc_.Ach().PopPendingToast(toastInfo)) return;
     const char* name = "?";
     for (const auto& def : Achievements::Defs()) {
         if (def.id == toastInfo.id) {

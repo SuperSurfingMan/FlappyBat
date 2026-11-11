@@ -1,4 +1,3 @@
-#include "app/Services.h"
 #include "ui/UISystem.h"
 
 #include "core/Input.h"
@@ -137,8 +136,8 @@ void UISystem::Dispatch() {
         if (hovered) Deliver(hovered, UIEventType::PointerLeave);
         hovered = hit;
         if (hovered) {
-            if (hovered->ShouldPlayFeedbackSFX())
-                Services::Get().Audio().PlaySFX(SFXToFile(SFX::Hover), 0.45f);
+            if (audio_ && hovered->ShouldPlayFeedbackSFX())
+                audio_->PlaySFX(SFXToFile(SFX::Hover), 0.45f);
             Deliver(hovered, UIEventType::PointerEnter);
         }
     }
@@ -152,8 +151,8 @@ void UISystem::Dispatch() {
             captured->SetCapturedFlag(true);
         }
         heldMask |= (1u << kBtn);  // 本键由 UI 消费：游戏侧不得再用它触发玩法输入
-        if (pressed->ShouldPlayFeedbackSFX())
-            Services::Get().Audio().PlaySFX(SFXToFile(SFX::Press), 0.55f);
+        if (audio_ && pressed->ShouldPlayFeedbackSFX())
+            audio_->PlaySFX(SFXToFile(SFX::Press), 0.55f);
         Deliver(pressed, UIEventType::PointerDown);
         Deliver(pressed, UIEventType::Drag);  // 按下当帧同走一次：点轨道/点滑条即定位
     } else if (pressed && down) {
@@ -175,8 +174,8 @@ void UISystem::Dispatch() {
                             target->GetHitRect().Contains(pointer.x, pointer.y);
         Deliver(target, UIEventType::PointerUp);
         if (inside) {
-            if (target->ShouldPlayFeedbackSFX())
-                Services::Get().Audio().PlaySFX(SFXToFile(SFX::Click), 1.0f);
+            if (audio_ && target->ShouldPlayFeedbackSFX())
+                audio_->PlaySFX(SFXToFile(SFX::Click), 1.0f);
             Deliver(target, UIEventType::Click);
         }
     }

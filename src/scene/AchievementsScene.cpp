@@ -14,18 +14,18 @@
 #include <algorithm>
 #include <cmath>
 
-AchievementsScene::AchievementsScene() {
-    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
+AchievementsScene::AchievementsScene(Services& services) : svc_(services) {
+    const float WIN_WIDTH  = (float)svc_.Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)svc_.Cfg().GetScreenHeight();
 
     // 背景：成就页专属背景（优先成就背景，失败回退榜单背景）
-    auto bgTex = Services::Get().Res().GetTexture2D("v2_ui_achievements_bg");
+    auto bgTex = svc_.Res().GetTexture2D("v2_ui_achievements_bg");
     background = std::make_shared<Sprite>(bgTex);
     background->SetPosition(WIN_WIDTH * 0.5f, WIN_HEIGHT * 0.5f);
     background->SetScale(WIN_WIDTH, WIN_HEIGHT);
 
     // 标题艺术字（成就页专属）
-    if (auto tex = Services::Get().Res().GetTexture2D("v2_ui_text_achievements")) {
+    if (auto tex = svc_.Res().GetTexture2D("v2_ui_text_achievements")) {
         titleSprite = std::make_shared<Sprite>(tex);
         titleSprite->SetLumaKey(true, 0.06f, 0.12f);
         titleSprite->SetScale(460.f, 230.f);
@@ -38,15 +38,15 @@ AchievementsScene::AchievementsScene() {
         Vec2{WIN_WIDTH * 0.5f, WIN_HEIGHT - 90.f},
         Vec2{290.f, UITheme::MainBtnH},
         "返回主菜单");
-    backToReady->SetOnClick([](){
-        Services::Get().Scenes().RequestScene(kSceneReady);
+    backToReady->SetOnClick([this]() {
+        svc_.Scenes().RequestScene(kSceneReady);
     });
 
     // ===== UI 控件组与热区登记（矩形在 DrawAchievements 中与绘制同源） =====
     // 注册顺序决定层叠：滚轮区（最大面积）< 滑轨 < 滑块（优先被抓取）
-    UISystem& ui = Services::Get().UI();
+    UISystem& ui = svc_.UI();
     achGroupId = ui.CreateGroup(20); // 与其它场景主控件同层
-    achScope.Bind(achGroupId, false);
+    achScope.Bind(ui, achGroupId, false);
     ui.Add(achGroupId, backToReady);
 
     listZone->SetPlayFeedbackSFX(false);
@@ -90,17 +90,17 @@ void AchievementsScene::Reset() {
     achScroll = achScrollTarget = 0.f;
     backToReady->Reset();
     background->Reset();
-    Services::Get().UI().ClearWidgetState(achGroupId);
+    svc_.UI().ClearWidgetState(achGroupId);
 }
 
 // ===== 成就列表（B7）：与榜单同款的可滚动列表（滚轮/滑块拖拽/轨道翻页） =====
 void AchievementsScene::DrawAchievements() {
-    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
+    const float WIN_WIDTH  = (float)svc_.Cfg().GetScreenWidth();
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     ImFont* font = UIBuilder::GetFont();
     if (!font) return;
 
-    auto& sys = Services::Get().Ach();
+    auto& sys = svc_.Ach();
     auto& defs = Achievements::Defs();
 
     // 与榜单同几何的面板
@@ -152,7 +152,7 @@ void AchievementsScene::DrawAchievements() {
                                            trackX + 11.f, trackTop + trackH));
     scrollTrack->SetEnabled(scrollable);
     scrollTrack->SetOnClick([this, thumbTop, viewH]() {
-        achScrollTarget += (Services::Get().UI().GetPointer().y < thumbTop) ? -viewH : viewH;
+        achScrollTarget += (svc_.UI().GetPointer().y < thumbTop) ? -viewH : viewH;
     });
 
     // 滑块：命中区略大于绘制宽度便于抓取；按下即捕获，拖拽直接定位（不做平滑）

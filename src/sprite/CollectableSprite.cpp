@@ -1,8 +1,6 @@
-#include "app/Services.h"
 #include "sprite/CollectableSprite.h"
 #include "render/Animation.h"
 #include "res/ResourceManager.h"
-#include "audio/AudioSystem.h"
 #include <iostream>
 
 void CollectableSprite::SetCallback(std::function<void()>&& cb) {
@@ -11,9 +9,9 @@ void CollectableSprite::SetCallback(std::function<void()>&& cb) {
 
 void CollectableSprite::OnCollide() {
     if (!isCollected) {
+        // 拾取音效与收益结算都由持有方（ItemField -> 场景）决定：
+        // 精灵只负责"被摸到了"这件事与自身的消散动画。
         if (callback) callback();
-        // 收集道具音效
-        Services::Get().Audio().PlaySFX(SFXToFile(SFX::Collect), 0.9f);
         // 当前问题: 摸到item之后动画直接没了 已解决
         SwitchToAnimation(1);
         std::cout << animation.get() << std::endl;
@@ -50,10 +48,11 @@ bool CollectableSprite::CheckCollision(const Vec2& position, const Vec2& scale) 
 }
 
 void CollectableSprite::InitAnimations(std::string type, size_t normal_tex_row,
-                                       size_t normal_tex_col, int disappearFrames) {
-    std::shared_ptr<Texture2D> normalSpritesheet = Services::Get().Res().GetTexture2D(type);
+                                       size_t normal_tex_col, int disappearFrames,
+                                       ResourceManager& res) {
+    std::shared_ptr<Texture2D> normalSpritesheet = res.GetTexture2D(type);
     std::string disappearTextureKey = type + "Disappear";
-    std::shared_ptr<Texture2D> disappearSpritesheet = Services::Get().Res().GetTexture2D(disappearTextureKey);
+    std::shared_ptr<Texture2D> disappearSpritesheet = res.GetTexture2D(disappearTextureKey);
     if (!normalSpritesheet || !disappearSpritesheet) {
         // 贴图键是运行时拼串约定（<type> / <type>Disappear）。缺一个原先会静默 return，
         // 表现为「道具永远不显示且无报错」；现在显式指出是哪个键没登记。

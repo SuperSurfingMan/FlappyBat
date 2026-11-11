@@ -19,6 +19,7 @@
 #include "gameplay/StageParams.h"
 #include "res/ManifestReader.h"
 #include "res/ResourceCatalog.h"
+#include "scene/ReadySceneLayout.h"
 #include "scene/stage/ParallaxField.h"
 #include "scene/stage/RunFlow.h"
 #include "scene/stage/RunSettlement.h"
@@ -205,6 +206,22 @@ void TestParallaxWrap() {
     CHECK(ParallaxField::WrapDistance(0) == 0.0f, "零块条带不做回绕（不空转）");
 }
 
+// ===== 6) 主菜单布局公式（第 5 期把常量抽到 ReadySceneLayout.h 后的等价性证明） =====
+void TestMenuLayout() {
+    using namespace ready::layout;
+    // n=3 时与旧公式 (i-1) 逐像素一致：这是"抽常量不动版式"的硬约束
+    CHECK(ModeOffsetX(0, 3) == -1.0f, "3 模式：第 0 个按钮偏移 -1 个单位");
+    CHECK(ModeOffsetX(1, 3) == 0.0f,  "3 模式：第 1 个按钮居中");
+    CHECK(ModeOffsetX(2, 3) == 1.0f,  "3 模式：第 2 个按钮偏移 +1 个单位");
+    CHECK(ModeRowWidth(3) == 3 * kModeSubBtnW + 2 * kModeSubBtnGap,
+          "3 模式行宽 = 3 按钮 + 2 间距");
+
+    // 追加模式后自动保持对称（旧实现会把整行推偏）
+    CHECK(ModeOffsetX(0, 4) == -1.5f, "4 模式：首按钮偏移 -1.5 个单位");
+    CHECK(ModeOffsetX(3, 4) == 1.5f,  "4 模式：末按钮偏移 +1.5 个单位");
+    CHECK(ModeRowWidth(0) == 0.0f,    "零模式时不产生行宽（不参与命中）");
+}
+
 // ===== 1) 注册表契约 + 自定义策略 =====
 void TestRegistryContracts() {
     auto& registry = ModeRegistry::Instance();
@@ -347,6 +364,7 @@ int main() {
     TestInterfaceSegregation();
     TestSettlementRules();
     TestParallaxWrap();
+    TestMenuLayout();
 
     // 只清理由本次测试创建的文件与空目录，不递归删除任何东西
     std::filesystem::current_path(saved, ec);

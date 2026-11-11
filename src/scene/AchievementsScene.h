@@ -6,11 +6,12 @@
 
 class Sprite;
 class ButtonSprite;
+class Services;
 
 // 成就场景：主界面奖杯入口直达；原为 ScoreRankScene 内嵌成就视图，现拆分为独立场景
 class AchievementsScene : public Scene {
 public:
-    AchievementsScene();
+    explicit AchievementsScene(Services& svc_);
     ~AchievementsScene();
 
     void OnEnter() override;
@@ -20,6 +21,8 @@ public:
     void Reset() override;
 
 private:
+    Services& svc_; // 构造期注入的服务聚合
+
     std::shared_ptr<ButtonSprite> backToReady;
     std::shared_ptr<Sprite> background;
     std::shared_ptr<Sprite> titleSprite;

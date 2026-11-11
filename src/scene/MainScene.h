@@ -40,7 +40,7 @@ class MainScene : public Scene,
                   public IPlayerCommands,
                   public IGameInputSink {
 public:
-    MainScene();
+    explicit MainScene(Services& svc);
     ~MainScene();
 
     void OnEnter() override;
@@ -66,6 +66,8 @@ public:
     const ModeParams& params() const { return ParamsOf(flow.Mode()); }
 
 private:
+    Services& svc_; // 组合根下发的服务聚合（构造期注入）
+
     void LoadSpritesFromResourceManager();
 
     std::shared_ptr<Sprite> bat;
@@ -164,8 +166,9 @@ private:
 
     bool showDebugPanel = false; // 调试面板默认收起，按 F1 切换（可选）
 
-    const float terrain_render_height = Services::Get().Cfg().GetTerrainRenderHeight();   // 地面贴图的实际大小
-    const float terrain_height = Services::Get().Cfg().GetTerrainHeight(); // 地面高度
+    // 地面几何在构造时从注入的配置取一次（不再在成员初始化器里查全局服务）
+    const float terrain_render_height;   // 地面贴图的实际大小
+    const float terrain_height;          // 地面高度
 
     // ===== 怪物（EnemyDirector 框架，docs/怪物系统架构设计.md）：场景与具体怪物解耦的唯一通道 =====
     // 枭王（D14 血月枭王）为首个注册怪物；场景只认导演与 IEnemy 契约

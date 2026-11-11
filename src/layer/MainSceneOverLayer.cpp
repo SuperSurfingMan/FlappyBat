@@ -16,14 +16,14 @@ namespace {
 constexpr int kLayerOverPanel = 50;
 }
 
-MainSceneOverLayer::MainSceneOverLayer() {
+MainSceneOverLayer::MainSceneOverLayer(Services& services) : svc_(services) {
     InitSprites();
 
-    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
+    const float WIN_WIDTH  = (float)svc_.Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)svc_.Cfg().GetScreenHeight();
 
     // GL 全屏遮罩
-    auto whiteTex = Services::Get().Res().GetTexture2D("white");
+    auto whiteTex = svc_.Res().GetTexture2D("white");
     if (whiteTex) {
         scrimSprite = std::make_shared<Sprite>(whiteTex);
         scrimSprite->SetColor(0.031f, 0.024f, 0.067f, 0.65f);
@@ -32,21 +32,21 @@ MainSceneOverLayer::MainSceneOverLayer() {
     }
 
     // 结算面板
-    auto panelTex = Services::Get().Res().GetTexture2D("v2_ui_panel");
+    auto panelTex = svc_.Res().GetTexture2D("v2_ui_panel");
     if (panelTex) {
         panelSprite = std::make_shared<Sprite>(panelTex);
         panelSprite->SetLumaKey(true, 0.06f, 0.10f);
     }
 
     // GAME OVER 艺术字
-    auto goTex = Services::Get().Res().GetTexture2D("v2_ui_text_gameover");
+    auto goTex = svc_.Res().GetTexture2D("v2_ui_text_gameover");
     if (goTex) {
         gameOverTextSprite = std::make_shared<Sprite>(goTex);
         gameOverTextSprite->SetLumaKey(true, 0.06f, 0.10f);
     }
 
     // 结算层默认关闭，ActivateLayer 时整体打开
-    overScope.Bind(overGroupId, true);
+    overScope.Bind(svc_.UI(), overGroupId, true);
     SetUpdateEnabled(false);
     SetRenderEnabled(false);
     SetInputEnabled(false);
@@ -96,8 +96,8 @@ void MainSceneOverLayer::OnUpdate(float dt) {
 }
 
 void MainSceneOverLayer::OnDraw(SpriteRenderer& renderer) {
-    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
+    const float WIN_WIDTH  = (float)svc_.Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)svc_.Cfg().GetScreenHeight();
     const float cx = WIN_WIDTH * 0.5f;
 
     // 1) 全屏暗色遮罩（GL）
@@ -144,14 +144,14 @@ void MainSceneOverLayer::Reset() {
     blinkInterval = 2.0f;
     currentScore = 0;
     bestScore = 0;
-    Services::Get().UI().ClearWidgetState(overGroupId);
+    svc_.UI().ClearWidgetState(overGroupId);
     SyncInputGroups();
 }
 
 void MainSceneOverLayer::InitSprites() {
-    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
+    const float WIN_WIDTH  = (float)svc_.Cfg().GetScreenWidth();
 
-    UISystem& ui = Services::Get().UI();
+    UISystem& ui = svc_.UI();
     overGroupId = ui.CreateGroup(kLayerOverPanel);
 
     // 蝙蝠眨眼动画
@@ -162,7 +162,7 @@ void MainSceneOverLayer::InitSprites() {
     anim->SetEmptyWhenDone(false);
     for (size_t i = 1; i <= 7; ++i) {
         std::string key = "batBlink0" + std::to_string(i);
-        auto tex = Services::Get().Res().GetTexture2D(key);
+        auto tex = svc_.Res().GetTexture2D(key);
         if (tex) anim->AddFrame(tex);
     }
     anim->MakeFrameUVSyncWithFrameList01();
@@ -197,14 +197,14 @@ void MainSceneOverLayer::InitSprites() {
         Vec2{WIN_WIDTH * 0.5f, btnY0 + UITheme::MainBtnH * 0.5f + gap + UITheme::SecondaryBtnH * 0.5f},
         Vec2{UITheme::SecondaryBtnW, UITheme::SecondaryBtnH},
         "返回主菜单");
-    backToReadyButton->SetOnClick([](){
-        Services::Get().Scenes().RequestScene(kSceneReady);
+    backToReadyButton->SetOnClick([this]() {
+        svc_.Scenes().RequestScene(kSceneReady);
     });
     ui.Add(overGroupId, backToReadyButton);
 }
 
 void MainSceneOverLayer::DrawImGUILayout() {
-    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
+    const float WIN_WIDTH  = (float)svc_.Cfg().GetScreenWidth();
 
     const float offset = 220.f;
 

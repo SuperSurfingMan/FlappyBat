@@ -4,6 +4,7 @@
 #include <vector>
 
 class Sprite;
+class ResourceManager;
 
 // =============================================================================
 // 视差背景层（第 4 期从 MainScene 抽出）。
@@ -20,7 +21,7 @@ public:
     // 单块贴图宽度（美术资源固定值；回绕距离 = kTileWidth * 块数）
     static constexpr float kTileWidth = 270.0f;
 
-    void Load();   // 从资源管理器取三段贴图组
+    void Load(ResourceManager& res);   // 三段贴图组由场景注入的资源管理器提供
 
     // 初排：三段条带按「首块半宽 + i × 块宽」横向铺满，纵向按地面高度对齐
     void Reset(float screenW, float screenH, float terrainHeight, float terrainRenderHeight);

@@ -19,7 +19,9 @@ public:
                float fontSize = 20.0f, float life = 1.0f);
 
     void Update(float dt);
-    void Draw() const; // ImGui 前景层
+    // 世界 -> 屏幕的 y 翻转换算需要画布高度：由调用方按快照下发，
+    // 表现层不反向查全局配置。
+    void Draw(float screenH) const; // ImGui 前景层
 
     void Shake(float intensity);
     // 有抖动时输出投影偏移并返回 true；无抖动返回 false

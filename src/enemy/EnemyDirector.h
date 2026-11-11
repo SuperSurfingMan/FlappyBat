@@ -23,7 +23,7 @@ class EnemyDirector {
 public:
     void Register(std::shared_ptr<IEnemy> enemy);
 
-    void InitAll();     // 资源就绪后建精灵/对象池
+    void InitAll(const class Config& cfg, class ResourceManager& res); // 资源就绪后建精灵/对象池
     void OnRunStart();  // 重开一局：全员完全复位
     void OnBatDead();   // 蝙蝠死亡：全员即时复位（段落中止）
 

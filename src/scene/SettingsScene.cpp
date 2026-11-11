@@ -17,13 +17,13 @@
 #include <cstdio>
 #include <string>
 
-SettingsScene::SettingsScene() {
-    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
+SettingsScene::SettingsScene(Services& services) : svc_(services) {
+    const float WIN_WIDTH  = (float)svc_.Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)svc_.Cfg().GetScreenHeight();
 
     // 背景：复用排行榜场景的钟楼内景
-    auto bgTex = Services::Get().Res().GetTexture2D("v2_ui_scoreboard_bg");
-    if (!bgTex) bgTex = Services::Get().Res().GetTexture2D("scoreRankBackground");
+    auto bgTex = svc_.Res().GetTexture2D("v2_ui_scoreboard_bg");
+    if (!bgTex) bgTex = svc_.Res().GetTexture2D("scoreRankBackground");
     if (bgTex) {
         background = std::make_shared<Sprite>(bgTex);
         background->SetPosition(WIN_WIDTH * 0.5f, WIN_HEIGHT * 0.5f);
@@ -36,14 +36,14 @@ SettingsScene::SettingsScene() {
         Vec2{WIN_WIDTH * 0.5f, WIN_HEIGHT - 90.f},
         Vec2{UITheme::MainBtnW, UITheme::MainBtnH},
         "返回主菜单");
-    backToReady->SetOnClick([](){
-        Services::Get().Scenes().RequestScene(kSceneReady);
+    backToReady->SetOnClick([this]() {
+        svc_.Scenes().RequestScene(kSceneReady);
     });
 
     // UI 控件组：返回按钮与三条滑条均登记到 UISystem；滑条按下即捕获（拖出轨道仍跟随）
-    UISystem& ui = Services::Get().UI();
+    UISystem& ui = svc_.UI();
     settingsGroupId = ui.CreateGroup(20); // 与其它场景主控件同层
-    settingsScope.Bind(settingsGroupId, false);
+    settingsScope.Bind(ui, settingsGroupId, false);
     ui.Add(settingsGroupId, backToReady);
     for (int i = 0; i < 3; ++i) {
         sliders[i] = std::make_shared<UIWidget>();
@@ -83,11 +83,11 @@ float& SettingsScene::VolumeRef(int idx) {
 
 void SettingsScene::ApplyVolume(int idx, float v) {
     switch (idx) {
-        case 0: Services::Get().Audio().SetMasterVolume(v); break;
-        case 1: Services::Get().Audio().SetBGMVolume(v);    break;
-        case 2: Services::Get().Audio().SetSFXVolume(v);    break;
+        case 0: svc_.Audio().SetMasterVolume(v); break;
+        case 1: svc_.Audio().SetBGMVolume(v);    break;
+        case 2: svc_.Audio().SetSFXVolume(v);    break;
     }
-    Services::Get().Audio().SaveSettings(); // 滑块改变即实时应用并持久化
+    svc_.Audio().SaveSettings(); // 滑块改变即实时应用并持久化
 }
 
 SettingsScene::~SettingsScene() {}
@@ -117,13 +117,13 @@ void SettingsScene::Reset() {
     if (backToReady) backToReady->Reset();
     SyncFromAudioSystem();
     tab = Tab::Volume; // 回到音量栏目
-    Services::Get().UI().ClearWidgetState(settingsGroupId);
+    svc_.UI().ClearWidgetState(settingsGroupId);
 }
 
 void SettingsScene::SyncFromAudioSystem() {
-    masterVolume = Services::Get().Audio().GetMasterVolume();
-    bgmVolume    = Services::Get().Audio().GetBGMVolume();
-    sfxVolume    = Services::Get().Audio().GetSFXVolume();
+    masterVolume = svc_.Audio().GetMasterVolume();
+    bgmVolume    = svc_.Audio().GetBGMVolume();
+    sfxVolume    = svc_.Audio().GetSFXVolume();
 }
 
 // ===== 音量面板几何常量（风格与排行榜面板统一：暗色圆角面板 + 金色胶囊滑轨 + 金币圆钮） =====
@@ -147,8 +147,8 @@ constexpr float kTabContentGap = 14.f; // 页签行下缘到栏目内容区顶�
 }
 
 void SettingsScene::DrawImGuiLayout() {
-    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
+    const float WIN_WIDTH  = (float)svc_.Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)svc_.Cfg().GetScreenHeight();
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     ImFont* font = UIBuilder::GetFont();
 
