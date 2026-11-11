@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "ui/UISystem.h"
 
 #include "core/Input.h"
@@ -137,7 +138,7 @@ void UISystem::Dispatch() {
         hovered = hit;
         if (hovered) {
             if (hovered->ShouldPlayFeedbackSFX())
-                AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Hover), 0.45f);
+                Services::Get().Audio().PlaySFX(SFXToFile(SFX::Hover), 0.45f);
             Deliver(hovered, UIEventType::PointerEnter);
         }
     }
@@ -152,7 +153,7 @@ void UISystem::Dispatch() {
         }
         heldMask |= (1u << kBtn);  // 本键由 UI 消费：游戏侧不得再用它触发玩法输入
         if (pressed->ShouldPlayFeedbackSFX())
-            AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Press), 0.55f);
+            Services::Get().Audio().PlaySFX(SFXToFile(SFX::Press), 0.55f);
         Deliver(pressed, UIEventType::PointerDown);
         Deliver(pressed, UIEventType::Drag);  // 按下当帧同走一次：点轨道/点滑条即定位
     } else if (pressed && down) {
@@ -175,7 +176,7 @@ void UISystem::Dispatch() {
         Deliver(target, UIEventType::PointerUp);
         if (inside) {
             if (target->ShouldPlayFeedbackSFX())
-                AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Click), 1.0f);
+                Services::Get().Audio().PlaySFX(SFXToFile(SFX::Click), 1.0f);
             Deliver(target, UIEventType::Click);
         }
     }

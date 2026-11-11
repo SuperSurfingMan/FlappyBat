@@ -4,19 +4,19 @@
 #include <memory>
 
 class BatSprite;
-struct IStageFeedback;
+struct IFeedbackFx;
 
 // =============================================================================
 // 玩家能力与运动：能量护盾 / 俯冲 / 巨化 / 击杀慢动作 / 蝙蝠每帧运动。
 //
 // 边界：
 //   - 只管"玩家侧状态"；巨化撞飞哪根管道由 ObstacleField 判定（Giant() 提供体型）；
-//   - 上行反馈统一经 IStageFeedback，不直连音频/成就/UI；
+//   - 上行反馈只依赖 IFeedbackFx（飘字/音效/抖动），不直连音频/成就/UI；
 //   - locked 由场景在死亡/结算期间置位，阻止护盾释放等主动技能。
 // =============================================================================
 class PlayerAbilities {
 public:
-    void Init(std::shared_ptr<BatSprite> bat, IStageFeedback* fx);
+    void Init(std::shared_ptr<BatSprite> bat, IFeedbackFx* fx);
     void Reset();
     void SetLocked(bool locked) { locked_ = locked; }
 
@@ -63,7 +63,7 @@ private:
     void UpdateMotion(float dt, const StageFrame& f, Vec2 gustForce);
 
     std::shared_ptr<BatSprite> bat;
-    IStageFeedback* fx = nullptr;
+    IFeedbackFx* fx = nullptr;
     bool locked_ = false;
 
     // ===== 能量护盾 =====

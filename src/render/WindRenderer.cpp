@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "render/WindRenderer.h"
 
 #include "render/Shader.h"
@@ -52,8 +53,8 @@ void WindRenderer::ReseedLine(WindLine& line, bool anywhere) {
     static thread_local std::mt19937 rng{ std::random_device{}() };
     std::uniform_real_distribution<float> rnd(0.0f, 1.0f);
 
-    const float sw = (float)Config::GetInstance().GetScreenWidth();
-    const float sh = (float)Config::GetInstance().GetScreenHeight();
+    const float sw = (float)Services::Get().Cfg().GetScreenWidth();
+    const float sh = (float)Services::Get().Cfg().GetScreenHeight();
 
     line.length = 110.0f + rnd(rng) * 90.0f;                        // 110~200(连续长线)
     line.width  = 1.3f + rnd(rng) * 0.6f;                           // 1.3~1.9(原 0.7~1.1 属亚像素级,无 MSAA 下被光栅化稀释到近乎不可见)
@@ -109,8 +110,8 @@ void WindRenderer::Update(float dt)
     const float rhythm = 0.775f + 0.225f * std::sin(time_ * kRhythmFreq);
 
     // 细线沿流向移动;出界后从入场端重生
-    const float sw = (float)Config::GetInstance().GetScreenWidth();
-    const float sh = (float)Config::GetInstance().GetScreenHeight();
+    const float sw = (float)Services::Get().Cfg().GetScreenWidth();
+    const float sh = (float)Services::Get().Cfg().GetScreenHeight();
     for (auto& line : lines_) {
         const float v = (140.0f + 90.0f * line.speed) * strength_ * rhythm * dt;
         line.pos.x += flowDir_.x * v;

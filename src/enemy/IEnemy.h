@@ -1,11 +1,13 @@
 #pragma once
-#include "gameplay/GameMode.h"
+#include "gameplay/ModeDefinition.h"
 #include "core/Math.h"
 #include <memory>
 
 class Sprite;
 class SpriteRenderer;
-struct IStageFeedback;
+struct IFeedbackFx;      // 角色接口：纯表现
+struct IRunEconomy;      // 角色接口：结算通道
+struct IPlayerCommands;  // 角色接口：玩家权威操作
 
 // =============================================================================
 // 怪物框架公共契约（设计：docs/怪物系统架构设计.md §4）
@@ -32,7 +34,7 @@ struct EnemyContext {
     // 局面
     size_t score = 0;
     float  timeLeft = -1.f;      // 限时模式剩余秒数；<0 = 非限时
-    GameMode mode = GameMode::Classic; // 怪物按此自取调参（TuningFor）
+    ModeKey mode = kDefaultModeKey;    // 怪物按此自取调参（TuningFor(ModeKey)）
     // 世界几何（怪物不直连 Config）
     float terrainY = 0.f;
     float screenW = 0.f;
@@ -42,8 +44,11 @@ struct EnemyContext {
     bool diveRequested = false;  // S / ↓：俯冲输入（移动语义由场景实现）
     bool batDiving = false;      // 俯冲急坠中（怪物本体接触判定：俯冲撞击 B6-a）
     bool batParry = false;       // 俯冲无敌帧窗口内（弹反判定用，§4.1 三期）
-    // 表现服务（MainScene 实现；怪物的音效/飘字/抖动/奖励/致死一律经此上行）
-    IStageFeedback* fx = nullptr;
+    // 表现服务：三个角色接口各管一段职责，怪物只取自己用得到的那几个（ISP）。
+    // 全部由 MainScene 在构造 ctx 时填充，指向同一个实现对象。
+    IFeedbackFx*     fxFx      = nullptr;  // 飘字 / 音效 / 抖动 / 消息盒 / 落雷
+    IRunEconomy*     fxEconomy = nullptr;  // 计分 / 金币 / 限时 / 成就
+    IPlayerCommands* fxPlayer  = nullptr;  // 致死 / 弹开 / 无敌 / 巨化 / 慢动作
 };
 
 // ---- 段落规则接管：怪物声明「当前改写了哪些世界规则」，场景只查聚合结果 ----
@@ -76,7 +81,7 @@ public:
     virtual void OnRunStart() = 0;    // 重开一局：完全复位
     virtual void OnBatDead() = 0;     // 蝙蝠死亡：即时复位（段落中止）
 
-    // ---- 每帧（反馈经 ctx.fx 同步上行；致死统一 fx->KillPlayer）----
+    // ---- 每帧（反馈经 ctx.fxFx / ctx.fxEconomy / ctx.fxPlayer 同步上行；致死统一 fxPlayer->KillPlayer）----
     virtual void Update(float dt, const EnemyContext& ctx) = 0;
 
     // ---- 渲染（导演按注册序在固定槽位调用；怪物品牌化 HUD/弹幕自绘）----

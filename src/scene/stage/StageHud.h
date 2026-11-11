@@ -14,6 +14,10 @@ class UIWidget;
 class StageHud {
 public:
     struct Snapshot {
+        // 画布尺寸随快照传入：HUD 不再自己去取全局配置（可直接用任意尺寸构造快照验证布局）
+        float screenW = 540.0f;
+        float screenH = 960.0f;
+
         int   score = 0;
         int   coins = 0;
 
@@ -46,7 +50,7 @@ public:
     void DrawCountdown(const Snapshot& s);
 
     // 能量图标（闪电）的命中矩形：绘制与 UISystem 命中判定共用一份几何
-    static void GetEnergyIconRect(float& cx, float& cy, float& size);
+    static void GetEnergyIconRect(const Snapshot& s, float& cx, float& cy, float& size);
 
 private:
     void DrawScore(const Snapshot& s);

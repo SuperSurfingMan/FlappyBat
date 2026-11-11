@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "sprite/BatSprite.h"
 #include "core/Input.h"
 #include "core/Config.h"
@@ -14,12 +15,12 @@ BatSprite::BatSprite(std::shared_ptr<Texture2D> texture) : Sprite(texture)
 {
     // 初始化飞行动画
     std::cout << "init bat fly sheet \n";
-    auto flySpriteSheet = ResourceManager::Get().GetTexture2D("batFlySheet");
+    auto flySpriteSheet = Services::Get().Res().GetTexture2D("batFlySheet");
     flyAnimation = std::make_unique<Animation>(true, false); 
     flyAnimation->InitAnimationUV(flySpriteSheet, 4);
 
     std::cout << "init bat dead sheet \n";
-    auto deadSpriteSheet = ResourceManager::Get().GetTexture2D("batDeadSheet");
+    auto deadSpriteSheet = Services::Get().Res().GetTexture2D("batDeadSheet");
     deadAnimation = std::make_unique<Animation>(false, true);
     deadAnimation->InitAnimationUV(deadSpriteSheet, 7);
 
@@ -158,16 +159,16 @@ void BatSprite::SwitchToAnimation(int animIndex) {
 }
 
 void BatSprite::LoadParamsFromConfig() {
-    gravity = Config::GetInstance().GetGravity();
-    jumpStrength = Config::GetInstance().GetFlapStrength();
+    gravity = Services::Get().Cfg().GetGravity();
+    jumpStrength = Services::Get().Cfg().GetFlapStrength();
     // 横向活动边界：窗口内侧留出半身位余量（蝙蝠 64px）
-    float screenWidth = (float)Config::GetInstance().GetScreenWidth();
+    float screenWidth = (float)Services::Get().Cfg().GetScreenWidth();
     xBoundMin = 40.0f;
     xBoundMax = screenWidth - 40.0f;
     // 纵向活动边界：与 MainScene::CollisionDetect 的撞地/撞顶致死线重合
     // （地面线 terrain_height + 触边半高，天花板线 屏高 - 触边半高）
-    yBoundMin = Config::GetInstance().GetTerrainHeight() + EdgeContactMargin;
-    yBoundMax = (float)Config::GetInstance().GetScreenHeight() - EdgeContactMargin;
+    yBoundMin = Services::Get().Cfg().GetTerrainHeight() + EdgeContactMargin;
+    yBoundMax = (float)Services::Get().Cfg().GetScreenHeight() - EdgeContactMargin;
 }
 
 BatSprite::~BatSprite() {

@@ -1,10 +1,9 @@
+#include "app/Services.h"
 #include "scene/stage/WeatherDirector.h"
 #include "gameplay/StageParams.h"
 #include "core/Config.h"
 #include "render/SpriteRenderer.h"
-#include "render/RainRenderer.h"
-#include "render/LightningRenderer.h"
-#include "render/WindRenderer.h"
+#include "scene/stage/WeatherRendererRoster.h"
 #include "res/ResourceManager.h"
 #include "sprite/Sprite.h"
 #include "ui/UIBuilder.h"
@@ -83,35 +82,31 @@ void DrawDashedPolyline(ImDrawList* dl, const std::vector<ImVec2>& pts, ImU32 co
 
 } // namespace
 
+void WeatherDirector::AddRenderer(std::unique_ptr<IRenderer> renderer) {
+    if (!renderer) return;
+    IRenderer* p = renderer.get();
+    renderers_.push_back(std::move(renderer));
+    // 按声明的槽位即时建表，运行期追加渲染器同样生效
+    for (WorldSlot s : p->Slots())
+        slotOwners_[(size_t)s].push_back(p);
+}
+
 void WeatherDirector::Init() {
-    rainSystem = ResourceManager::Get().GetRainSystem();
+    rainSystem = Services::Get().Res().GetRainSystem();
 
-    // ===== 渲染器注册表（方案一）：构造即注册，槽位分发表一次建立 =====
-    auto rain = std::make_unique<RainRenderer>();
-    auto lightning = std::make_unique<LightningRenderer>();
-    auto wind = std::make_unique<WindRenderer>();
-    rain->Init(rainSystem);
-    lightning->Init(rainSystem);
-    wind->Init(); // 风线（阵风可视化；数据自持，仅吃 Update 的阵风状态）
-
-    windRenderer_ = wind.get(); // 非 owning：每帧喂阵风状态
-    renderers_.push_back(std::move(rain));
-    renderers_.push_back(std::move(lightning));
-    renderers_.push_back(std::move(wind));
-
-    for (auto& r : renderers_)
-        for (WorldSlot s : r->Slots())
-            slotOwners_[(size_t)s].push_back(r.get());
+    // 渲染器由登记表注入：本导演不认识任何具体渲染器类型。
+    // 新增特效 = 实现 IRenderer + 登记表加一行，本文件零改动。
+    RegisterBuiltinWeatherRenderers(*this, rainSystem);
 
     // 天色变暗遮罩（A4-c）：白色纹理着色，透明度随难度档位渐变
-    auto whiteTex = ResourceManager::Get().GetTexture2D("white");
+    auto whiteTex = Services::Get().Res().GetTexture2D("white");
     if (whiteTex) {
         stormScrimSprite = std::make_shared<Sprite>(whiteTex);
         stormScrimSprite->SetColor(0.05f, 0.06f, 0.13f, 0.0f);
-        stormScrimSprite->SetScale(Config::GetInstance().GetScreenWidth() + 4.0f,
-                                   Config::GetInstance().GetScreenHeight() + 4.0f);
-        stormScrimSprite->SetPosition(Config::GetInstance().GetScreenWidth() * 0.5f,
-                                      Config::GetInstance().GetScreenHeight() * 0.5f);
+        stormScrimSprite->SetScale(Services::Get().Cfg().GetScreenWidth() + 4.0f,
+                                   Services::Get().Cfg().GetScreenHeight() + 4.0f);
+        stormScrimSprite->SetPosition(Services::Get().Cfg().GetScreenWidth() * 0.5f,
+                                      Services::Get().Cfg().GetScreenHeight() * 0.5f);
     }
 }
 
@@ -145,10 +140,13 @@ void WeatherDirector::AdvanceRain(float dt) {
 }
 
 void WeatherDirector::UpdateFx(float dt) {
-    // 阵风状态喂给风线渲染器（预警期无气流），再统一多态推进；
-    // 雨/雷逻辑数据在 RainSystem 内，由 AdvanceRain 推进，不经此处
-    windRenderer_->SetGust(gustTimer > 0.0f, gustForce);
-    for (auto& r : renderers_) r->Update(dt);
+    // 帧数据经 IRenderer 默认虚方法统一下行（只有风线渲染器消费），
+    // 再多态推进；雨/雷逻辑数据在 RainSystem 内，由 AdvanceRain 推进。
+    const bool gustActive = gustTimer > 0.0f;
+    for (auto& r : renderers_) {
+        r->SetGust(gustActive, gustForce);
+        r->Update(dt);
+    }
 }
 
 void WeatherDirector::RenderSlot(const RenderContext& ctx, WorldSlot slot) {
@@ -428,8 +426,8 @@ void WeatherDirector::DrawLightningWarning(float pulseClock) {
     const auto& pts = rainSystem->GetLightning().mainBranch.points;
     if (pts.size() < 2) return;
 
-    const float SCREEN_WIDTH = (float)Config::GetInstance().GetScreenWidth();
-    const float SCREEN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
+    const float SCREEN_WIDTH = (float)Services::Get().Cfg().GetScreenWidth();
+    const float SCREEN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
 
     // 折线（世界坐标，y 向上）转屏幕坐标（y 向下）
     std::vector<ImVec2> screenPts;
@@ -468,6 +466,6 @@ void WeatherDirector::DrawLightningWarning(float pulseClock) {
     float halfW = ts.x * 0.5f;
     float textX = std::clamp(sx, halfW + 8.0f, SCREEN_WIDTH - halfW - 8.0f);
     UIBuilder::DrawCenteredText("雷", textX,
-                                SCREEN_HEIGHT - Config::GetInstance().GetTerrainHeight() - 22.0f,
+                                SCREEN_HEIGHT - Services::Get().Cfg().GetTerrainHeight() - 22.0f,
                                 24.0f, UITheme::ToImU32(UITheme::Amber, 0.5f + 0.5f * pulse));
 }

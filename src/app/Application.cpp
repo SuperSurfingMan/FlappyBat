@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "app/Application.h"
 
 #include "scene/SceneManager.h"
@@ -74,7 +75,7 @@ bool Application::Init(int width, int height, const char* title)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Audio System
-    if (!AudioSystem::Instance().Init())
+    if (!Services::Get().Audio().Init())
     {
         std::cerr << "Failed to init AudioSystem\n";
         return false;
@@ -88,7 +89,7 @@ bool Application::Init(int width, int height, const char* title)
     std::cout << "Resource manager initalizing... \n";
 
     // 仅构建加载队列（轻量）；实际资源加载延后到主循环，与 BootScene 并行执行
-    ResourceManager::Get().Init();
+    Services::Get().Res().Init();
 
     // 注意：其它场景（Ready/Main/ScoreRank）的构造延后到资源加载完成后，见 Run() 主循环
 
@@ -100,23 +101,23 @@ void Application::SetSystems(SceneManager* sm, SpriteRenderer* sr)
 {
     sceneManager = sm;
     bootScene = std::make_shared<BootScene>();
-    sm->Register(SceneId::Boot, bootScene);
+    sm->Register(kSceneBoot, bootScene);
     sm->ChangeScene(bootScene);
     spriteRenderer = sr;
 }
 
 void Application::GLFWCloseCallback(GLFWwindow* window)
 {
-    Application::Get().RequestQuit();
+    Services::Get().App().RequestQuit();
 }
 
 void Application::InitScenes() {
-    // 场景构造后登记进 SceneManager 注册表；此后所有切场均以 SceneId 寻址
-    sceneManager->Register(SceneId::Ready,       std::make_shared<ReadyScene>());
-    sceneManager->Register(SceneId::Main,        std::make_shared<MainScene>());
-    sceneManager->Register(SceneId::ScoreRank,   std::make_shared<ScoreRankScene>());
-    sceneManager->Register(SceneId::Achievements,std::make_shared<AchievementsScene>());
-    sceneManager->Register(SceneId::Settings,    std::make_shared<SettingsScene>());
+    // 场景构造后登记进 SceneManager 注册表；此后所有切场均以 SceneKey 寻址
+    sceneManager->Register(kSceneReady,       std::make_shared<ReadyScene>());
+    sceneManager->Register(kSceneMain,        std::make_shared<MainScene>());
+    sceneManager->Register(kSceneScoreRank,   std::make_shared<ScoreRankScene>());
+    sceneManager->Register(kSceneAchievements,std::make_shared<AchievementsScene>());
+    sceneManager->Register(kSceneSettings,    std::make_shared<SettingsScene>());
 }
 
 void Application::RequestQuit()
@@ -133,13 +134,13 @@ void Application::Run()
 {
     float projection[16];
     Ortho(
-        0.0f, (float)Config::GetInstance().GetScreenWidth(),
-        0.0f, (float)Config::GetInstance().GetScreenHeight(),
+        0.0f, (float)Services::Get().Cfg().GetScreenWidth(),
+        0.0f, (float)Services::Get().Cfg().GetScreenHeight(),
         projection
     );
     spriteRenderer->SetProjection(projection);
-    AudioSystem::Instance().PlayBGM("assets/Audio/Music/Background Music.mp3");
-    AudioSystem::Instance().SetMasterVolume(1.f);
+    Services::Get().Audio().PlayBGM("assets/Audio/Music/Background Music.mp3");
+    Services::Get().Audio().SetMasterVolume(1.f);
 
     int frameCount = 0;
     float fpsTimer = 0.0f;
@@ -192,9 +193,9 @@ void Application::Run()
 
         // ===== 异步资源加载（与 BootScene 完全并行） =====
         // 后台线程做 IO+解码，主线程每帧只上传几张纹理 + 至多一个收尾任务，帧率不受影响
-        if (!ResourceManager::Get().IsLoadingComplete()) {
-            ResourceManager::Get().UpdateLoading();
-            if (ResourceManager::Get().IsLoadingComplete()) {
+        if (!Services::Get().Res().IsLoadingComplete()) {
+            Services::Get().Res().UpdateLoading();
+            if (Services::Get().Res().IsLoadingComplete()) {
                 InitScenes(); // 资源就绪后，再构造依赖资源的其它场景
                 std::cout << "All resources loaded; scenes initialized. \n";
             }
@@ -204,18 +205,18 @@ void Application::Run()
 
         // ===== UI 事件派发：每帧一次集中命中判定，先于场景逻辑 =====
         // 控件不再自行轮询鼠标；Dispatch 之后本帧的鼠标归属与"按键是否被 UI 消费"已确定
-        UISystem::Get().BeginFrame(dt);
+        Services::Get().UI().BeginFrame(dt);
         // 全屏交互闸门：转场进行中冻结一切控件交互（值在本帧派发前同步）
-        UISystem::Get().SetInteractionBlocked(sceneManager->IsTransitionActive());
-        UISystem::Get().Dispatch();
+        Services::Get().UI().SetInteractionBlocked(sceneManager->IsTransitionActive());
+        Services::Get().UI().Dispatch();
 
-        AudioSystem::Instance().Update(); // 更新音频系统，清理已完成的音效
+        Services::Get().Audio().Update(); // 更新音频系统，清理已完成的音效
         sceneManager->TickTransition(dt); // 转场推进与遮蔽中点换景（先于场景逻辑，切幕当帧即新场景接管）
         sceneManager->GetCurrentScene()->Update(dt);
         sceneManager->GetCurrentScene()->Render(*spriteRenderer);
         sceneManager->DrawTransitionOverlay(); // 转场覆盖层最后追加：永远压在场景与 HUD 之上
 
-        UISystem::Get().EndFrame();
+        Services::Get().UI().EndFrame();
 
         spriteRenderer->End();
 
@@ -232,8 +233,8 @@ void Application::Run()
     // 这些后构造的单例已被销毁（逆序析构），访问已析构对象 → Segmentation Fault
     sceneManager->ExitCurrentScene();
 
-    ResourceManager::Get().Shutdown(); // 回收后台加载线程（加载中途退出也安全）
-    AudioSystem::Instance().Shutdown();
+    Services::Get().Res().Shutdown(); // 回收后台加载线程（加载中途退出也安全）
+    Services::Get().Audio().Shutdown();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

@@ -1,18 +1,17 @@
+#include "app/Services.h"
 #include "scene/SceneManager.h"
-#include "scene/CircleFocusTransition.h"
 #include "core/Config.h"
 #include <iostream>
 
-namespace {
-// 转场工厂：新增样式 = 新增一个 ISceneTransition 实现 + 在此加一个分支
-//（对扩展开放的唯一接缝；场景与切场调用点零改动）
-std::unique_ptr<ISceneTransition> MakeTransition(TransitionStyle style) {
-    switch (style) {
-    case TransitionStyle::CircleFocus: return std::make_unique<CircleFocusTransition>();
-    case TransitionStyle::None:        break;
-    }
-    return nullptr;
+void SceneManager::RegisterTransitionFactory(TransitionKey style,
+                                            TransitionFactory factory) {
+    transitionFactories[style] = std::move(factory);
 }
+
+std::unique_ptr<ISceneTransition> SceneManager::MakeTransition(TransitionKey style) {
+    auto it = transitionFactories.find(style);
+    if (it == transitionFactories.end() || !it->second) return nullptr;
+    return it->second();
 }
 
 SceneManager::SceneManager() {
@@ -27,26 +26,28 @@ SceneManager::~SceneManager() {
 
 // ===== 场景注册表 =====
 
-void SceneManager::Register(SceneId id, std::shared_ptr<Scene> scene) {
+void SceneManager::Register(SceneKey id, std::shared_ptr<Scene> scene) {
     registry[id] = std::move(scene);
 }
 
-std::shared_ptr<Scene> SceneManager::Resolve(SceneId id) const {
+std::shared_ptr<Scene> SceneManager::Resolve(SceneKey id) const {
     auto it = registry.find(id);
     return it != registry.end() ? it->second : nullptr;
 }
 
 // ===== 声明式切场 =====
 
-void SceneManager::RequestScene(SceneId id, const SceneArgs& args, TransitionStyle style) {
+void SceneManager::RequestScene(SceneKey id, const SceneArgs& args, TransitionKey style) {
     if (transition) return; // 转场进行中不接受新请求（防重入）
     auto next = Resolve(id);
     if (!next) {
-        std::cout << "RequestScene: scene id not registered, ignored." << std::endl;
+        // 未注册的键一律拒绝并指名：静默忽略会让「新增场景忘了登记」变成
+        // 点按钮没反应这种无从排查的现象
+        std::cerr << "RequestScene: 场景键未注册 -> \"" << id << "\"（检查组合根 Register）" << std::endl;
         return;
     }
 
-    if (style == TransitionStyle::None) { // 无样式：维持同帧直切语义
+    if (style == kTransitionNone) { // 无样式：维持同帧直切语义
         ChangeScene(std::move(next), args);
         return;
     }
@@ -57,13 +58,13 @@ void SceneManager::RequestScene(SceneId id, const SceneArgs& args, TransitionSty
     transition = MakeTransition(style);
     if (transition) {
         TransitionContext ctx;
-        const float w = (float)Config::GetInstance().GetScreenWidth();
-        const float h = (float)Config::GetInstance().GetScreenHeight();
+        const float w = (float)Services::Get().Cfg().GetScreenWidth();
+        const float h = (float)Services::Get().Cfg().GetScreenHeight();
         ctx.focusAnchor = args.focusAnchorScreen.value_or(Vec2{ w * 0.5f, h * 0.5f });
         transition->Start(ctx);
     } else {
         pendingScene = nullptr; // 未知样式：按防御处理，不切场
-        std::cout << "RequestScene: unknown transition style, ignored." << std::endl;
+        std::cerr << "RequestScene: 转场样式未注册 -> \"" << style << "\"（检查组合根工厂注册）" << std::endl;
     }
 }
 

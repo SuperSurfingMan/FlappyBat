@@ -1,5 +1,6 @@
 #pragma once
 #include "scene/stage/StageFrame.h"
+#include "gameplay/ItemCatalog.h"
 #include "core/Math.h"
 #include <array>
 #include <functional>
@@ -19,16 +20,10 @@ class SpriteRenderer;
 // =============================================================================
 class ItemField {
 public:
-    enum ItemType { Mosquito = 0, Firefly = 1, Kiwi = 2, TypeCount = 3 };
-
-    struct Effect {
-        int   score;           // 直接加分（蚊子 +1，其余 0）
-        float energy;          // 能量增量
-        int   coins;           // 拾取金币
-        const char* floatText; // 拾取飘字
-        float r, g, b;
-        float fontSize;
-    };
+    // 道具种类、效果与生成权重统一由 gameplay/ItemCatalog.h 的定义表给出；
+    // 新增道具不再需要扩枚举或改 EffectOf 表。
+    static constexpr std::size_t TypeCount = ItemCount();
+    using Effect = ItemEffect; // 兼容既有 ItemField::Effect 引用
     static const Effect& EffectOf(int itemType);
 
     void Load();
@@ -49,8 +44,6 @@ private:
     bool GenerateAt(int type, Vec2 position);
 
     // ===== 生成参数 =====
-    static constexpr float EnergyPerKiwi = 1.0f / 3.0f;      // 3 个果实充满
-    static constexpr float EnergyPerFirefly = 1.0f / 6.0f;   // 萤火虫充 1/6 能量
     static constexpr float ItemSpawnProbability = 0.55f;     // 每条走廊的生成概率
     static constexpr float ItemCorridorEdgeMargin = 90.0f;   // 距障碍物列中心的最小水平距离
     static constexpr float ItemMinCorridorWidth = 30.0f;     // 走廊可用宽度低于此值不生成
@@ -60,12 +53,10 @@ private:
     static constexpr float OrbSpawnChance = 0.10f;           // 巨化星生成概率
     static constexpr int   ItemPoolCap = 3;
 
-    std::vector<std::shared_ptr<Sprite>> mosquitoes;
-    std::vector<std::shared_ptr<Sprite>> fireflies;
-    std::vector<std::shared_ptr<Sprite>> kiwis;
-    std::array<bool, ItemPoolCap> mosquitoesUsed{};
-    std::array<bool, ItemPoolCap> fireflyUsed{};
-    std::array<bool, ItemPoolCap> kiwiUsed{};
+    // 两类并行容器统一按 ItemType 索引：新增道具只需加枚举值 + Load() 一行，
+    // 不再有 Pool()/Used() 的 switch，也不会出现「default 静默落到猕猴桃池」的错乱。
+    std::array<std::vector<std::shared_ptr<Sprite>>, TypeCount> pools_;
+    std::array<std::array<bool, ItemPoolCap>, TypeCount> used_;
 
     std::shared_ptr<Sprite> giantOrb;
     bool orbUsed = false;

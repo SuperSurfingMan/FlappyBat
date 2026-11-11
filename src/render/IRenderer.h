@@ -21,6 +21,10 @@ public:
     // 每帧推进自驱动粒子(如风线);依赖外部模拟数据的渲染器保持空实现
     virtual void Update(float dt) { (void)dt; }
 
+    // 每帧下行的天气帧数据(阵风状态)。默认空实现：只有关心的渲染器 override，
+    // WeatherDirector 因此不必持有某个具体渲染器的裸指针特例。
+    virtual void SetGust(bool active, const Vec2& force) { (void)active; (void)force; }
+
     // 绘制本渲染器认领槽位中与 slot 匹配的内容;非认领槽位调用为空操作
     virtual void Render(const RenderContext& ctx, WorldSlot slot) = 0;
 

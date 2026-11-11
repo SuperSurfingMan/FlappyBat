@@ -1,9 +1,10 @@
 #pragma once
+#include "gameplay/ModeDefinition.h"
 
 // =============================================================================
-// 多模式枚举（B9）：由 ReadyScene 在进入 MainScene 前设置。
-// 独立小头文件：怪物实现（src/enemy/）需要按模式取参，但不允许反向依赖场景头文件
-// （docs/怪物系统架构设计.md 决策 D6）；MainScene 内以 using 别名保持
-// MainScene::GameMode 的既有引用方式不变。
+// 兼容头（第 2 期）：enum class GameMode 已移除。
+//
+// 模式现在由 gameplay/ModeRegistry.h 的 ModeRegistry + IGameMode 策略管理，
+// 标识统一使用 ModeKey（string_view）。保留本头是为了让尚未更新的 include
+// 仍能编译；新代码请直接 include ModeDefinition.h / ModeRegistry.h。
 // =============================================================================
-enum class GameMode { Classic, TimeRush, StormNight };

@@ -1,10 +1,15 @@
 #pragma once
 #include "enemy/IEnemy.h"
 #include <memory>
+#include <string>
 #include <vector>
 
 // 内置怪物登记表（EnemyRoster.cpp）：新增怪物的唯一登记点（docs/怪物系统架构设计.md §9）
 void RegisterBuiltinEnemies(class EnemyDirector& director);
+
+// 启动期校验：每个内置怪物的「按模式调参表」都必须覆盖全部 GameMode。
+// 新增模式是最容易漏补这些表的地方；与登记点同文件维护，新增怪物时在此补一行。
+bool ValidateEnemyTunings(std::string* firstError = nullptr);
 
 // =============================================================================
 // 怪物导演：场景与怪物之间的唯一通道（docs/怪物系统架构设计.md §4.4）。
@@ -22,7 +27,7 @@ public:
     void OnRunStart();  // 重开一局：全员完全复位
     void OnBatDead();   // 蝙蝠死亡：全员即时复位（段落中止）
 
-    // 每帧驱动；ctx.fx 须由调用方填好（MainScene 自身实现 IStageFeedback）。
+    // 每帧驱动；ctx.fxFx / ctx.fxEconomy / ctx.fxPlayer 须由调用方填好（MainScene 实现三个窄接口）。
     // 调用结束后 Rules() 即为当帧聚合结果。
     void Update(float dt, const EnemyContext& ctx);
 

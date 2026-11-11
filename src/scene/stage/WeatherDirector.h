@@ -29,7 +29,10 @@ enum WeatherMsgSlot { WMsgGust = 0, WMsgLightning = 1, WMsgStorm = 2 };
 // =============================================================================
 class WeatherDirector {
 public:
-    void Init();                                  // 取 RainSystem 并初始化三个渲染器、建槽位分发表
+    void Init();                                  // 取 RainSystem / 遮罩，并委托登记表注入渲染器
+    // 注册一个天气渲染器：立即按 Slots() 声明加入槽位分发表。
+    // 新增特效 = 实现 IRenderer + 在 WeatherRendererRoster.cpp 加一行，本类零改动。
+    void AddRenderer(std::unique_ptr<IRenderer> renderer);
     void Reset();                                 // 新一局：消息盒/阵风/遮罩归零
     void OnEnter(float lightningWarnLead);        // 进入场景：设置预警提前量
 
@@ -108,6 +111,4 @@ private:
     std::vector<std::unique_ptr<IRenderer>> renderers_;
     // 槽位分发表：Init 时按各渲染器 Slots() 声明建立，渲染期零扫描
     std::array<std::vector<IRenderer*>, (size_t)WorldSlot::Count> slotOwners_;
-    // 非 owning：指向注册表内的风线渲染器，每帧喂阵风状态用
-    WindRenderer* windRenderer_ = nullptr;
 };

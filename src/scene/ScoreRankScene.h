@@ -3,6 +3,7 @@
 #include "app/ScoreRank.h"
 #include "ui/UIWidget.h"   // 页签/滚动条/遮罩等内联热区控件需完整类型
 #include "ui/InputScope.h"   // 主榜单组（非模态）+ 清空确认弹窗（模态）
+#include <array>
 #include <string>
 #include <vector>
 #include <memory>
@@ -36,7 +37,7 @@ private:
     std::shared_ptr<ToastLayer> toastLayer;
 
     // ===== 模式切换（三模式独立榜单）：当前查看的模式页签 =====
-    ScoreRank::RankMode viewMode = ScoreRank::RankMode::Classic;
+    ModeKey viewMode = kDefaultModeKey;
 
     // ===== 清空记录二次确认弹窗 =====
     bool  confirmClearOpen = false; // 弹窗是否打开
@@ -55,8 +56,8 @@ private:
     InputScope dialogScope; // 清空确认弹窗（模态）
     // 热区控件以 shared_ptr 登记（所有权与本场景和 UISystem 共享）：
     // 标量在声明处创建，tabs 在构造函数现有循环里逐个创建后登记。
-    std::shared_ptr<UIWidget> tabs[3];
-                            // 模式页签（个数与 ScoreRank::ModeCount 一致，构造函数中创建）
+    std::vector<std::shared_ptr<UIWidget>> tabs;
+                            // 模式页签：构造时按 ModeRegistry::Size() 动态创建
     std::shared_ptr<UIWidget> listZone = std::make_shared<UIWidget>();
                             // 榜单视口：悬停于此接受滚轮滚动
     std::shared_ptr<UIWidget> scrollTrack = std::make_shared<UIWidget>();
@@ -69,7 +70,7 @@ private:
                             // 弹窗面板本体：吞掉面板内空白处的点击（不误判为“点遮罩取消”）
 
     void LoadRankList();
-    void SwitchViewMode(ScoreRank::RankMode mode); // 切换页签并重载对应模式榜单
+    void SwitchViewMode(ModeKey mode); // 切换页签并重载对应模式榜单
     void DrawModeTabs(float panelX, float panelTop); // 面板顶部的模式页签行
     void DrawImGUIText();
     void DrawImGuiRank();

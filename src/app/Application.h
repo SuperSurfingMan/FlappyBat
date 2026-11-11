@@ -33,7 +33,7 @@ private:
 private:
     static void GLFWCloseCallback(GLFWwindow* window);
 
-    // 资源就绪后构造其余场景并登记进 SceneManager 注册表（SceneId 寻址）
+    // 资源就绪后构造其余场景并登记进 SceneManager 注册表（SceneKey 寻址）
     void InitScenes();
 private:
     GLFWwindow* window = nullptr;

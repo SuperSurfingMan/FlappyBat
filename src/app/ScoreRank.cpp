@@ -1,40 +1,61 @@
 #include "app/ScoreRank.h"
+#include "gameplay/ModeRegistry.h"
 #include <fstream>
 #include <algorithm>
 #include <iostream>
-// 新版文件魔数：文件首个 size_t 等于该值时按「三模式分段格式」解析；
-// 否则视为旧版单榜格式（整文件按 size_t 顺序读入，全部归入经典模式）。
-// 取现实中不可能达到的分数值，避免与旧数据的首条记录混淆。
+
+// 新版文件魔数：文件首个 size_t 等于该值时按「多模式分段格式」解析；
+// 否则视为旧版单榜格式（整文件按 size_t 顺序读入，全部归入注册序第 0 个模式）。
+//
+// 注意：魔数里的 "3" 只是历史协议标识，不是模式数量。段数由文件中紧随其后的
+// modeCount 字段表达；改动此值会让旧存档被误判为旧版单榜格式而损坏，务必保持不变。
 static constexpr size_t kFileMagic = 0x46424154334D4F44ULL; // "FBAT3MOD"
+static constexpr size_t kNoIndex = static_cast<size_t>(-1);
+
+ScoreRank& ScoreRank::Get() {
+    static ScoreRank instance;
+    return instance;
+}
 
 ScoreRank::ScoreRank() {
     LoadFromFile();
 }
 
-const char* ScoreRank::ModeName(RankMode m) {
-    static const char* names[ModeCount] = { "经典无尽", "限时冲刺", "风暴之夜" };
-    const int i = (int)m;
-    return (i >= 0 && i < (int)ModeCount) ? names[i] : "?";
+void ScoreRank::EnsureSize() {
+    const std::size_t n = ModeRegistry::Instance().Size();
+    if (scoreRanks.size() < n) scoreRanks.resize(n);
 }
 
-std::vector<size_t> ScoreRank::GetScores(RankMode mode) {
-    const int i = (int)mode;
-    if (i < 0 || i >= (int)ModeCount) return {};
+std::size_t ScoreRank::IndexOf(ModeKey key) const {
+    auto& registry = ModeRegistry::Instance();
+    return registry.Contains(key) ? registry.IndexOf(key) : kNoIndex;
+}
+
+const char* ScoreRank::ModeName(ModeKey key) {
+    auto& registry = ModeRegistry::Instance();
+    return registry.Contains(key) ? registry.Get(key).DisplayName() : "?";
+}
+
+std::vector<size_t> ScoreRank::GetScores(ModeKey key) {
+    const std::size_t i = IndexOf(key);
+    if (i == kNoIndex) return {};
+    EnsureSize();
     return scoreRanks[i];
 }
 
-std::vector<size_t> ScoreRank::GetScoresFromDisk(RankMode mode) {
+std::vector<size_t> ScoreRank::GetScoresFromDisk(ModeKey key) {
     std::cout << "score rank reload from disk" << std::endl;
     LoadFromFile();
-    return GetScores(mode);
+    return GetScores(key);
 }
 
-void ScoreRank::UpdateScore(size_t score, RankMode mode) {
-    const int i = (int)mode;
-    if (i < 0 || i >= (int)ModeCount) return;
+void ScoreRank::UpdateScore(size_t score, ModeKey key) {
+    const std::size_t i = IndexOf(key);
+    if (i == kNoIndex) return;
+    EnsureSize();
 
     auto& list = scoreRanks[i];
-    std::cout << "update score (" << ModeName(mode) << "): " << score << std::endl;
+    std::cout << "update score (" << ModeName(key) << "): " << score << std::endl;
     list.emplace_back(score);
     // 降序排序：最高分排第一（排行榜 No.01 / 结算面板"最高分"均取 front()）
     std::sort(list.begin(), list.end(),
@@ -44,17 +65,21 @@ void ScoreRank::UpdateScore(size_t score, RankMode mode) {
     WriteToFile();
 }
 
-void ScoreRank::ClearScores(RankMode mode) {
-    const int i = (int)mode;
-    if (i < 0 || i >= (int)ModeCount) return;
+void ScoreRank::ClearScores(ModeKey key) {
+    const std::size_t i = IndexOf(key);
+    if (i == kNoIndex) return;
+    EnsureSize();
     // 一次性清空该模式内存榜单并立刻整文件重写（其它模式数据保留）
     scoreRanks[i].clear();
     WriteToFile();
-    std::cout << "score rank cleared (" << ModeName(mode)
+    std::cout << "score rank cleared (" << ModeName(key)
               << "), size: " << scoreRanks[i].size() << std::endl;
 }
 
 void ScoreRank::LoadFromFile() {
+    // 段数始终与当前注册表对齐；注册表为空时不读档，等待组合根完成登记
+    EnsureSize();
+    if (scoreRanks.empty()) return; // 注册表为空时不读档，等待组合根完成登记
     for (auto& list : scoreRanks) list.clear();
 
     std::ifstream readScores(rankInfoFilename, std::ios::in | std::ios::binary);
@@ -65,7 +90,7 @@ void ScoreRank::LoadFromFile() {
         // 新版格式：[魔数][模式数][各模式: 条数 + 分数...]
         size_t modeCount = 0;
         readScores.read(reinterpret_cast<char*>(&modeCount), sizeof(modeCount));
-        for (size_t m = 0; m < modeCount && m < ModeCount; ++m) {
+        for (size_t m = 0; m < modeCount && m < scoreRanks.size(); ++m) {
             auto& list = scoreRanks[m];
             size_t cnt = 0;
             readScores.read(reinterpret_cast<char*>(&cnt), sizeof(cnt));
@@ -77,8 +102,8 @@ void ScoreRank::LoadFromFile() {
             }
         }
     } else {
-        // 旧版单榜格式（无魔数头）：整文件顺序读入，一次性迁移为经典模式榜单
-        auto& classic = scoreRanks[(size_t)RankMode::Classic];
+        // 旧版单榜格式（无魔数头）：整文件顺序读入，迁移到注册序第 0 个模式
+        auto& classic = scoreRanks[0];
         readScores.clear();
         readScores.seekg(0);
         size_t number = 0;
@@ -96,13 +121,14 @@ void ScoreRank::LoadFromFile() {
 }
 
 void ScoreRank::WriteToFile() {
-    // 整文件重写：[魔数][模式数][各模式: 条数 + 分数...]，三种模式同文件分段保存
+    EnsureSize();
+    // 整文件重写：[魔数][模式数][各模式: 条数 + 分数...]
     std::ofstream outScores(rankInfoFilename, std::ios::out | std::ios::binary | std::ios::trunc);
     size_t magic = kFileMagic;
-    size_t modeCount = ModeCount;
+    size_t modeCount = scoreRanks.size();
     outScores.write(reinterpret_cast<char*>(&magic), sizeof(magic));
     outScores.write(reinterpret_cast<char*>(&modeCount), sizeof(modeCount));
-    for (size_t m = 0; m < ModeCount; ++m) {
+    for (size_t m = 0; m < scoreRanks.size(); ++m) {
         auto& list = scoreRanks[m];
         size_t cnt = std::min(list.size(), listLengthLimit);
         outScores.write(reinterpret_cast<char*>(&cnt), sizeof(cnt));

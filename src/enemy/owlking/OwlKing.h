@@ -34,7 +34,9 @@ public:
             int coinHitCap;    // 命中加币部分的封顶值
         } rewards;
     };
-    static const Tuning& TuningFor(GameMode mode);
+    // 按 ModeKey 取调参：未登记的模式使用明确命名的默认调参，
+    // 因此新增游戏模式不需要改动任何怪物代码。
+    static const Tuning& TuningFor(ModeKey key);
 
     // ---- 全局攻击欲望（§7.1 扩展，全局唯一切柄）：[0,1]，越高技能释放越频繁 ----
     // 只缩放技能间隔（SkillInterval），不改各阶段技能池与预警/释放/力竭时长（§5 预警底线不动）；
@@ -200,8 +202,8 @@ private:
     float heartBreakTimer = 0.f; // 碎裂残影剩余时长
 
     // ===== 帧内上下文与致死暂存 =====
-    const EnemyContext* ctx_ = nullptr; // 仅 Update 期间有效（内部辅助经此取 fx）
-    IStageFeedback* lastFx_ = nullptr;  // 最近一帧的表现服务（生命周期方法清消息行用；场景存活期内恒有效）
+    const EnemyContext* ctx_ = nullptr;   // 仅 Update 期间有效（内部辅助经此取窄接口）
+    IFeedbackFx* lastFxFx_ = nullptr;     // 最近一帧的表现服务（生命周期方法清消息行用；场景存活期内恒有效）
     bool pendingKill_ = false;          // 心数归零：Update 收尾统一 fx->KillPlayer（对齐原事件出队时序）
 
     // ===== 内部流程 =====

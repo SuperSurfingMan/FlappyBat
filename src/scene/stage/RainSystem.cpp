@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "scene/stage/RainSystem.h"
 
 #include "res/ResourceManager.h"
@@ -9,14 +10,14 @@
 #include <iostream>
 
 void RainSystem::InitStepRains() {
-    size_t rainCount = Config::GetInstance().GetRainSystemConfigs().first;
-    float screenWidth = (float)Config::GetInstance().GetScreenWidth();
-    float screenHeight = (float)Config::GetInstance().GetScreenHeight();
+    size_t rainCount = Services::Get().Cfg().GetRainSystemConfigs().first;
+    float screenWidth = (float)Services::Get().Cfg().GetScreenWidth();
+    float screenHeight = (float)Services::Get().Cfg().GetScreenHeight();
     InitRains((int)rainCount, screenWidth, screenHeight);
 }
 
 void RainSystem::InitStepSplashSets() {
-    size_t splashCount = Config::GetInstance().GetRainSystemConfigs().second;
+    size_t splashCount = Services::Get().Cfg().GetRainSystemConfigs().second;
     InitSplashSets(splashCount);
 }
 
@@ -274,7 +275,7 @@ void RainSystem::BeginLightningStrike() {
     strikeDangerTimer = LightningDangerDuration;
     // 雷击音效与闪电视觉同步触发（短而强）；雷路径已在预警开始时生成，此处不再重建
     std::cout << "[Audio] Thunder strike at x=" << strikeX << "\n";
-    AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Thunder), 1.0f);
+    Services::Get().Audio().PlaySFX(SFXToFile(SFX::Thunder), 1.0f);
 }
 
 float RainSystem::GetTimeToNextLightning() const {
@@ -375,7 +376,7 @@ void RainSystem::StartRandomLightning(float interval_min, float interval_max) {
 }
 
 void RainSystem::InitSplashSets(size_t set_size) {
-    auto rainSplashSpritesheet = ResourceManager::Get().GetTexture2D("rainSplash");
+    auto rainSplashSpritesheet = Services::Get().Res().GetTexture2D("rainSplash");
     rainSplashSpritesInactive.reserve(set_size);
     rainSplashSpritesActive.reserve(set_size);
     for (size_t i = 0;i < set_size; ++i) {

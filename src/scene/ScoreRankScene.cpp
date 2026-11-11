@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "scene/ScoreRankScene.h"
 #include "sprite/ButtonSprite.h"
 #include "ui/UIBuilder.h"
@@ -7,6 +8,7 @@
 #include "sprite/Sprite.h"
 #include "core/Config.h"
 #include "app/ScoreRank.h"
+#include "gameplay/ModeRegistry.h"
 #include "ui/FontManager.h"
 #include "layer/ToastLayer.h"
 #include "core/Input.h"
@@ -28,29 +30,41 @@ constexpr float kTabTopPad = 26.f;  // 面板顶边到页签行的留白
 // UI 层叠：榜单主控件组与确认弹窗（模态）
 constexpr int kLayerRankMain = 20;
 constexpr int kLayerConfirmDialog = 60;
+
+// 第 i 个页签相对行中心的偏移，单位为「页签宽 + 间距」。
+// n=3 时等于 (i-1)，与原公式一致；模式数变化时自动保持对称。
+inline float TabOffsetX(int i) {
+    return (float)i - ((float)ModeRegistry::Instance().Size() - 1.0f) * 0.5f;
+}
+
+// 页签行总宽（分隔线宽度与之对齐），由模式数量推导
+inline float TabRowWidth() {
+    return (float)ModeRegistry::Instance().Size() * kTabW +
+           (float)(ModeRegistry::Instance().Size() - 1) * kTabGap;
+}
 }
 
 ScoreRankScene::ScoreRankScene() {
-    const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
+    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
 
     // UI 控件组：榜单主控件（非模态）+ 确认弹窗（模态）
     // 注册顺序即层叠顺序：后注册者在上（页签/滑块 > 滚轮区/滑轨 > 遮罩 > 按钮）
-    UISystem& ui = UISystem::Get();
+    UISystem& ui = Services::Get().UI();
     rankGroupId   = ui.CreateGroup(kLayerRankMain);
     dialogGroupId = ui.CreateGroup(kLayerConfirmDialog);
     rankScope.Bind(rankGroupId, false);
     dialogScope.Bind(dialogGroupId, true);
 
     // 背景：钟楼内景（优先 v2，失败回退旧背景）
-    auto bgTex = ResourceManager::Get().GetTexture2D("v2_ui_scoreboard_bg");
-    if (!bgTex) bgTex = ResourceManager::Get().GetTexture2D("scoreRankBackground");
+    auto bgTex = Services::Get().Res().GetTexture2D("v2_ui_scoreboard_bg");
+    if (!bgTex) bgTex = Services::Get().Res().GetTexture2D("scoreRankBackground");
     background = std::make_shared<Sprite>(bgTex);
     background->SetPosition(WIN_WIDTH * 0.5f, WIN_HEIGHT * 0.5f);
     background->SetScale(WIN_WIDTH, WIN_HEIGHT);
 
     // 标题艺术字 HIGH SCORES
-    if (auto tex = ResourceManager::Get().GetTexture2D("v2_ui_text_rank")) {
+    if (auto tex = Services::Get().Res().GetTexture2D("v2_ui_text_rank")) {
         titleSprite = std::make_shared<Sprite>(tex);
         titleSprite->SetLumaKey(true, 0.06f, 0.12f);
         titleSprite->SetScale(460.f, 230.f);
@@ -64,7 +78,7 @@ ScoreRankScene::ScoreRankScene() {
         Vec2{290.f, UITheme::MainBtnH},
         "返回主菜单");
     backToReady->SetOnClick([](){
-        SceneManager::Instance().RequestScene(SceneId::Ready);
+        Services::Get().Scenes().RequestScene(kSceneReady);
     });
     ui.Add(rankGroupId, backToReady);
 
@@ -90,7 +104,7 @@ ScoreRankScene::ScoreRankScene() {
         Vec2{WIN_WIDTH - 52.f, 52.f},
         52.f);
     syncAndLoad->SetOnClick([this](){
-        scoreRank = ScoreRank::Get().GetScoresFromDisk(viewMode);
+        scoreRank = Services::Get().Scores().GetScoresFromDisk(viewMode);
         toastLayer->SetText("已加载最新记录");
         toastLayer->SetColor(Vec3{0.4f, 0.85f, 0.4f});
         toastLayer->Activate();
@@ -121,8 +135,8 @@ ScoreRankScene::ScoreRankScene() {
         "确认清空");
     confirmYes->SetOnClick([this](){
         // 一次性清空当前模式内存榜单并同步写入本地 score.dat，随后重新读盘确认结果
-        ScoreRank::Get().ClearScores(viewMode);
-        scoreRank = ScoreRank::Get().GetScoresFromDisk(viewMode);
+        Services::Get().Scores().ClearScores(viewMode);
+        scoreRank = Services::Get().Scores().GetScoresFromDisk(viewMode);
         listScroll = listScrollTarget = 0.f;
         CloseClearConfirm();
         toastLayer->SetText(std::string("已清空") + ScoreRank::ModeName(viewMode) + "记录");
@@ -142,9 +156,10 @@ ScoreRankScene::ScoreRankScene() {
     scrollThumb->SetCaptureOnPress(true);    // 按下即捕获：拖拽移出滑轨仍连续跟随
     ui.Add(rankGroupId, scrollThumb);
 
-    for (int i = 0; i < (int)ScoreRank::ModeCount; ++i) {
+    tabs.resize(ModeRegistry::Instance().Size()); // 页签数量由注册表动态决定
+    for (int i = 0; i < (int)ModeRegistry::Instance().Size(); ++i) {
         tabs[i] = std::make_shared<UIWidget>();
-        tabs[i]->SetOnClick([this, i]() { SwitchViewMode((ScoreRank::RankMode)i); });
+        tabs[i]->SetOnClick([this, i]() { SwitchViewMode(ModeRegistry::Instance().At((size_t)i).Key()); });
         ui.Add(rankGroupId, tabs[i]);        // 页签最后注册：盖在滚轮区之上
     }
 
@@ -168,7 +183,7 @@ ScoreRankScene::ScoreRankScene() {
 ScoreRankScene::~ScoreRankScene() {}
 
 void ScoreRankScene::OnEnter() {
-    viewMode = ScoreRank::RankMode::Classic; // 每次进入默认查看经典模式页签
+    viewMode = kDefaultModeKey; // 每次进入默认查看经典模式页签
     LoadRankList();
     // 每次进入榜单回到顶部
     listScroll = listScrollTarget = 0.f;
@@ -235,20 +250,20 @@ void ScoreRankScene::Reset() {
     confirmNo->Reset();
     toastLayer->Reset();
     scoreRank.clear();
-    viewMode = ScoreRank::RankMode::Classic;
+    viewMode = kDefaultModeKey;
     listScroll = listScrollTarget = 0.f;
-    UISystem::Get().ClearWidgetState(rankGroupId);
-    UISystem::Get().ClearWidgetState(dialogGroupId);
+    Services::Get().UI().ClearWidgetState(rankGroupId);
+    Services::Get().UI().ClearWidgetState(dialogGroupId);
 }
 
 void ScoreRankScene::LoadRankList() {
-    scoreRank = ScoreRank::Get().GetScores(viewMode);
+    scoreRank = Services::Get().Scores().GetScores(viewMode);
 }
 
-void ScoreRankScene::SwitchViewMode(ScoreRank::RankMode mode) {
+void ScoreRankScene::SwitchViewMode(ModeKey mode) {
     if (mode == viewMode) return;
     viewMode = mode;
-    scoreRank = ScoreRank::Get().GetScores(viewMode);
+    scoreRank = Services::Get().Scores().GetScores(viewMode);
     listScroll = listScrollTarget = 0.f; // 切换模式回到顶部
 }
 
@@ -256,9 +271,9 @@ void ScoreRankScene::SwitchViewMode(ScoreRank::RankMode mode) {
 void ScoreRankScene::DrawModeTabs(float panelX, float panelTop) {
     const float rowY = panelTop + kTabTopPad + kTabH * 0.5f;
 
-    for (int i = 0; i < (int)ScoreRank::ModeCount; ++i) {
-        const float tx = panelX + (float)(i - 1) * (kTabW + kTabGap);
-        const bool selected = (i == (int)viewMode);
+    for (int i = 0; i < (int)ModeRegistry::Instance().Size(); ++i) {
+        const float tx = panelX + TabOffsetX(i) * (kTabW + kTabGap);
+        const bool selected = (viewMode == ModeRegistry::Instance().At((size_t)i).Key());
 
         // 热区与页签底板同源；选中项不可点（避免无效高亮与音效）
         tabs[i]->SetRect(UIRect::FromCenter(tx, rowY, kTabW, kTabH));
@@ -274,7 +289,7 @@ void ScoreRankScene::DrawModeTabs(float panelX, float panelTop) {
             selected ? 3.0f : 2.0f);
 
         // 文字：选中金色，未选中月光白（悬停提亮）
-        UIBuilder::DrawCenteredText(ScoreRank::ModeName((ScoreRank::RankMode)i),
+        UIBuilder::DrawCenteredText(ScoreRank::ModeName(ModeRegistry::Instance().At((size_t)i).Key()),
                                     tx, rowY, 22.f,
             selected ? UITheme::ToImU32(UITheme::Amber)
                      : UITheme::ToImU32(UITheme::Moonlight, hovered ? 0.95f : 0.75f));
@@ -283,14 +298,14 @@ void ScoreRankScene::DrawModeTabs(float panelX, float panelTop) {
 
     // 页签行与榜单之间的分隔线（宽度与页签行对齐）
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    const float halfRowW = (3.f * kTabW + 2.f * kTabGap) * 0.5f;
+    const float halfRowW = TabRowWidth() * 0.5f;
     const float lineY = rowY + kTabH * 0.5f + 8.f;
     dl->AddLine(ImVec2(panelX - halfRowW, lineY), ImVec2(panelX + halfRowW, lineY),
                 UITheme::ToImU32(UITheme::AmberDim, 0.5f));
 }
 
 void ScoreRankScene::DrawImGuiRank() {
-    const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
+    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
 
     // 榜单面板（暗色圆角 + 暗金描边）
     const float panelX = WIN_WIDTH * 0.5f;
@@ -355,7 +370,7 @@ void ScoreRankScene::DrawImGuiRank() {
                                            trackX + 11.f, trackTop + trackH));
     scrollTrack->SetEnabled(scrollable);
     scrollTrack->SetOnClick([this, thumbTop, viewH]() {
-        listScrollTarget += (UISystem::Get().GetPointer().y < thumbTop) ? -viewH : viewH;
+        listScrollTarget += (Services::Get().UI().GetPointer().y < thumbTop) ? -viewH : viewH;
     });
 
     // 滑块：命中区略大于绘制宽度便于抓取；按下即捕获，拖拽直接定位（不做平滑）
@@ -466,8 +481,8 @@ void ScoreRankScene::DrawImGUIText() {
 // ===== 清空记录二次确认弹窗 =====
 
 void ScoreRankScene::ConfirmDialogRect(float& cx, float& cy, float& w, float& h) const {
-    cx = (float)Config::GetInstance().GetScreenWidth() * 0.5f;
-    cy = (float)Config::GetInstance().GetScreenHeight() * 0.49f;
+    cx = (float)Services::Get().Cfg().GetScreenWidth() * 0.5f;
+    cy = (float)Services::Get().Cfg().GetScreenHeight() * 0.49f;
     w = 420.f;
     h = 310.f;
 }
@@ -503,8 +518,8 @@ void ScoreRankScene::CloseClearConfirm() {
 }
 
 void ScoreRankScene::DrawClearConfirmDialog() {
-    const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
+    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
 
     float cx, cy, dw, dh;
     ConfirmDialogRect(cx, cy, dw, dh);

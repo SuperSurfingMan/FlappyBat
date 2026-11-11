@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "scene/ReadyScene.h"
 #include "sprite/ButtonSprite.h"
 #include "ui/UIBuilder.h"
@@ -11,9 +12,11 @@
 #include "app/Application.h"
 #include "res/ResourceManager.h"
 #include "sprite/BatSprite.h"
-#include "gameplay/GameMode.h"
+#include "gameplay/ModeRegistry.h"
+#include "gameplay/StageParams.h"
 #include "app/PlayerProfile.h"
 #include "audio/AudioSystem.h"
+#include <cassert>
 #include <cstdio>
 
 namespace {
@@ -23,11 +26,18 @@ constexpr int kLayerUpgradePanel = 40;
 // 分裂维持区相对整行的外扩余量（与原 inRow 判定一致）
 constexpr float kRowZonePadX = 14.0f;
 constexpr float kRowZonePadY = 16.0f;
+
+// 第 i 个模式按钮相对行中心的偏移，单位为「按钮宽 + 间距」。
+// n=3 时等于 (i-1)，与原居中公式逐像素一致；n 变化时自动保持对称，
+// 不再需要手写 (i-1) 或 (i-1.5f) 之类绑定数量的魔数。
+inline float ModeOffsetX(int i) {
+    return (float)i - ((float)ModeRegistry::Instance().Size() - 1.0f) * 0.5f;
+}
 }
 
 ReadyScene::ReadyScene() {
     // 声明本场景关注的快捷键（ESC 关升级面板）：交由 UISystem 采集后推送
-    UISystem::Get().WatchKeys({GLFW_KEY_ESCAPE});
+    Services::Get().UI().WatchKeys({GLFW_KEY_ESCAPE});
 
     InitScene();
     std::cout << "ReadyScene created." << std::endl;
@@ -35,7 +45,7 @@ ReadyScene::ReadyScene() {
 
 ReadyScene::~ReadyScene() {
     // 兼底注销（正常已由 OnExit 注销）：退出路径若跳过 OnExit 则防悬针 sink
-    UISystem::Get().RemoveGameInputSink(this);
+    Services::Get().UI().RemoveGameInputSink(this);
 }
 
 void ReadyScene::OnEnter() {
@@ -43,7 +53,7 @@ void ReadyScene::OnEnter() {
     menuScope.SetEnabled(true);
     upgradeScope.SetEnabled(upgradePanelOpen);
     // 订阅推送式输入（本场景只用 ESC 关闭升级面板）
-    UISystem::Get().AddGameInputSink(this);
+    Services::Get().UI().AddGameInputSink(this);
 }
 
 void ReadyScene::OnExit() {
@@ -51,12 +61,12 @@ void ReadyScene::OnExit() {
     menuScope.SetEnabled(false);
     upgradeScope.SetEnabled(false);
     // 停止输入推送
-    UISystem::Get().RemoveGameInputSink(this);
+    Services::Get().UI().RemoveGameInputSink(this);
 }
 
 void ReadyScene::Update(float dt) {
     // 转场驱动与遮蔽中点切幕已上收 SceneManager（TickTransition）；本场景只查询状态做本地闸门
-    const bool transitioning = SceneManager::Instance().IsTransitionActive();
+    const bool transitioning = Services::Get().Scenes().IsTransitionActive();
 
     // 升级面板：ESC 关闭（读 UISystem 推送的快照，不再直接询设备）
     if (upgradePanelOpen && gameInput.Pressed(GLFW_KEY_ESCAPE)) {
@@ -148,8 +158,8 @@ void ReadyScene::Reset() {
     tipFade = 0.0f;
     if (achievementEntry) achievementEntry->Reset();
     // 上一轮留下的悬停/按下视觉一并清除（注册关系不变）
-    UISystem::Get().ClearWidgetState(menuGroupId);
-    UISystem::Get().ClearWidgetState(upgradeGroupId);
+    Services::Get().UI().ClearWidgetState(menuGroupId);
+    Services::Get().UI().ClearWidgetState(upgradeGroupId);
 }
 
 void ReadyScene::InitScene() {
@@ -159,12 +169,12 @@ void ReadyScene::InitScene() {
 }
 
 void ReadyScene::InitButtons() {
-    const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
+    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
     const float cx = WIN_WIDTH * 0.5f;
 
     // UI 组：主菜单控件（非模态）+ 护盾升级面板（模态）
     // 注册顺序即层叠顺序：后注册者在上（模式按钮 > 分裂行区域 > 菜单按钮）
-    UISystem& ui = UISystem::Get();
+    UISystem& ui = Services::Get().UI();
     menuGroupId    = ui.CreateGroup(kLayerMenu);
     upgradeGroupId = ui.CreateGroup(kLayerUpgradePanel);
     menuScope.Bind(menuGroupId, false);
@@ -185,7 +195,7 @@ void ReadyScene::InitButtons() {
         Vec2{UITheme::MainBtnW, UITheme::MainBtnH},
         "开始游戏");
     startBtn->SetOnClick([this](){
-        if (SceneManager::Instance().IsTransitionActive() || upgradePanelOpen) return;
+        if (Services::Get().Scenes().IsTransitionActive() || upgradePanelOpen) return;
         splitOpen = true;
         std::cout << "Start button split by click." << std::endl;
     });
@@ -198,7 +208,7 @@ void ReadyScene::InitButtons() {
         Vec2{UITheme::SecondaryBtnW, UITheme::SecondaryBtnH},
         "排行榜");
     rankBtn->SetOnClick([](){
-        SceneManager::Instance().RequestScene(SceneId::ScoreRank);
+        Services::Get().Scenes().RequestScene(kSceneScoreRank);
     });
     menuButtons.push_back(rankBtn);
 
@@ -209,7 +219,7 @@ void ReadyScene::InitButtons() {
         Vec2{UITheme::SecondaryBtnW, UITheme::SecondaryBtnH},
         "设置");
     settingsBtn->SetOnClick([](){
-        SceneManager::Instance().RequestScene(SceneId::Settings);
+        Services::Get().Scenes().RequestScene(kSceneSettings);
     });
     menuButtons.push_back(settingsBtn);
 
@@ -220,7 +230,7 @@ void ReadyScene::InitButtons() {
         Vec2{UITheme::SecondaryBtnW, UITheme::SecondaryBtnH},
         "退出游戏");
     exitBtn->SetOnClick([](){
-        Application::Get().RequestQuit();
+        Services::Get().App().RequestQuit();
     });
     menuButtons.push_back(exitBtn);
 
@@ -230,7 +240,7 @@ void ReadyScene::InitButtons() {
         Vec2{WIN_WIDTH - 52.f, 52.f},
         52.f);
     achievementEntry->SetOnClick([](){
-        SceneManager::Instance().RequestScene(SceneId::Achievements);
+        Services::Get().Scenes().RequestScene(kSceneAchievements);
     });
 
     // ===== 菜单按钮登记到 UISystem（传 shared_ptr，登记即共享持有） =====
@@ -238,17 +248,19 @@ void ReadyScene::InitButtons() {
     ui.Add(menuGroupId, achievementEntry);
 
     // ===== 分裂行热区：维持展开的整行横向范围（只取悬停事实，不绘制不发声） =====
-    const float rowW = ModeSubBtnW * 3.0f + ModeSubBtnGap * 2.0f;
+    const float rowW = ModeSubBtnW * (float)ModeRegistry::Instance().Size() +
+                       ModeSubBtnGap * (float)(ModeRegistry::Instance().Size() - 1);
     startRowZone->SetRect(UIRect::FromCenter(cx, StartBtnY,
                                             rowW + kRowZonePadX * 2.0f,
                                             UITheme::MainBtnH + kRowZonePadY * 2.0f));
     startRowZone->SetPlayFeedbackSFX(false);
     ui.Add(menuGroupId, startRowZone);
 
-    // ===== 三个模式按钮热区：分裂完成后最终几何即此矩形（DrawStartButtonRow 同一组常量） =====
-    for (int i = 0; i < 3; ++i) {
+    // ===== 模式按钮热区：分裂完成后最终几何即此矩形（DrawStartButtonRow 共用 ModeOffsetX） =====
+    modeZones.resize(ModeRegistry::Instance().Size()); // 数量由注册表动态决定
+    for (int i = 0; i < (int)ModeRegistry::Instance().Size(); ++i) {
         modeZones[i] = std::make_shared<UIWidget>();
-        const float bx = cx + (float)(i - 1) * (ModeSubBtnW + ModeSubBtnGap);
+        const float bx = cx + ModeOffsetX(i) * (ModeSubBtnW + ModeSubBtnGap);
         modeZones[i]->SetRect(UIRect::FromCenter(bx, StartBtnY, ModeSubBtnW, UITheme::MainBtnH));
         modeZones[i]->SetOnClick([this, i]() { StartGameWithMode(i); });
         ui.Add(menuGroupId, modeZones[i]);
@@ -267,10 +279,10 @@ void ReadyScene::InitButtons() {
         buyZones[t] = std::make_shared<UIWidget>();
         buyZones[t]->SetPlayFeedbackSFX(false); // 购买结果自带音效（成功=奖励音）
         buyZones[t]->SetOnClick([this, t]() {
-            auto& profile = PlayerProfile::Get();
+            auto& profile = Services::Get().Profile();
             if (profile.GetLevel(t) >= PlayerProfile::MaxLevel) return; // 已满级：不响应
             if (profile.TryBuy(t)) {
-                AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Record), 1.0f);
+                Services::Get().Audio().PlaySFX(SFXToFile(SFX::Record), 1.0f);
                 std::cout << "Shield track " << t << " upgraded to level "
                           << profile.GetLevel(t) << "." << std::endl;
             } else {
@@ -286,24 +298,24 @@ void ReadyScene::InitButtons() {
 }
 
 void ReadyScene::LoadSpritesFromResourceManager() {
-    batSprite = ResourceManager::Get().GetSprite("bat");
-    terrainSprites = ResourceManager::Get().GetSpriteList("terrain");
-    backgroundSprites = ResourceManager::Get().GetSpriteList("background");
-    foregroundSprites = ResourceManager::Get().GetSpriteList("foreground");
+    batSprite = Services::Get().Res().GetSprite("bat");
+    terrainSprites = Services::Get().Res().GetSpriteList("terrain");
+    backgroundSprites = Services::Get().Res().GetSpriteList("background");
+    foregroundSprites = Services::Get().Res().GetSpriteList("foreground");
 }
 
 void ReadyScene::ResetBatState() {
-    const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
+    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
     batSprite->SetPosition(WIN_WIDTH * 0.5f, WIN_HEIGHT * 0.5f + 100.f);
     auto batSprite_cast = std::static_pointer_cast<BatSprite>(batSprite);
     batSprite_cast->ResetState();
 }
 
 void ReadyScene::ResetFixedSpritesState() {
-    float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
-    float terrain_height = Config::GetInstance().GetTerrainHeight();
-    float terrain_render_height = Config::GetInstance().GetTerrainRenderHeight();
+    float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
+    float terrain_height = Services::Get().Cfg().GetTerrainHeight();
+    float terrain_render_height = Services::Get().Cfg().GetTerrainRenderHeight();
 
     float backgroundSpriteHeight = WIN_HEIGHT - terrain_height;
     for (int i = 0; i < 3; i++) {
@@ -314,21 +326,21 @@ void ReadyScene::ResetFixedSpritesState() {
 }
 
 void ReadyScene::UpdateFixedSprites(float dt) {
-    const float backgroundSpeed = Config::GetInstance().GetBackgroundSpeed();
+    const float backgroundSpeed = Services::Get().Cfg().GetBackgroundSpeed();
     for (auto& bg : backgroundSprites) {
         auto pos = bg->GetPosition();
         pos.x -= backgroundSpeed * dt;
         if (pos.x <= -270.0f * 0.5f) pos.x += 270.0f * 3;
         bg->SetPosition(pos.x, pos.y);
     }
-    const float foregroundSpeed = Config::GetInstance().GetForegroundSpeed();
+    const float foregroundSpeed = Services::Get().Cfg().GetForegroundSpeed();
     for (auto& fg : foregroundSprites) {
         auto pos = fg->GetPosition();
         pos.x -= foregroundSpeed * dt;
         if (pos.x <= -270.0f * 0.5f) pos.x += 270.0f * 3;
         fg->SetPosition(pos.x, pos.y);
     }
-    const float terrainSpeed = Config::GetInstance().GetObstacleSpeed();
+    const float terrainSpeed = Services::Get().Cfg().GetObstacleSpeed();
     for (auto& fg : terrainSprites) {
         auto pos = fg->GetPosition();
         pos.x -= terrainSpeed * dt;
@@ -342,11 +354,11 @@ void ReadyScene::UpdateBat(float dt) {
 }
 
 void ReadyScene::CreateSceneSprites() {
-    const float WIN_WIDTH  = (float)Config::GetInstance().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
+    const float WIN_WIDTH  = (float)Services::Get().Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
 
     // LOGO（上部居中，蝙蝠与月亮构图）
-    auto logoTex = ResourceManager::Get().GetTexture2D("v2_ui_logo");
+    auto logoTex = Services::Get().Res().GetTexture2D("v2_ui_logo");
     if (logoTex) {
         logoSprite = std::make_shared<Sprite>(logoTex);
         logoSprite->SetLumaKey(true, 0.06f, 0.12f);
@@ -354,7 +366,7 @@ void ReadyScene::CreateSceneSprites() {
         logoSprite->SetPosition(WIN_WIDTH * 0.5f, WIN_HEIGHT - 200.f);
     }
 
-    std::shared_ptr<Texture2D> centerFrameTexture = ResourceManager::Get().GetTexture2D("centerFrame");
+    std::shared_ptr<Texture2D> centerFrameTexture = Services::Get().Res().GetTexture2D("centerFrame");
     centerFrame = std::make_shared<Sprite>(centerFrameTexture);
     centerFrame->SetPosition(WIN_WIDTH * 0.5f, WIN_HEIGHT * 0.5f + 100.f);
     centerFrame->SetScale(300.f, 300.f);
@@ -364,7 +376,7 @@ void ReadyScene::CreateSceneSprites() {
         Vec2{133.f, 358.f}, Vec2{146.f, 351.f}, Vec2{160.f, 369.f},
         Vec2{377.f, 368.f}, Vec2{391.f, 350.f}, Vec2{406.f, 358.f}
     };
-    std::shared_ptr<Texture2D> candleLightSpritesheet = ResourceManager::Get().GetTexture2D("candleLight");
+    std::shared_ptr<Texture2D> candleLightSpritesheet = Services::Get().Res().GetTexture2D("candleLight");
     for (size_t i = 0; i < candleLightPositions.size(); ++i) {
         auto candleLightInstance = std::make_shared<Sprite>();
         candleLightInstance->InitAnimationByTexture(candleLightSpritesheet, 8);
@@ -384,7 +396,7 @@ void ReadyScene::UpdateCandlelights(float dt) {
 
 void ReadyScene::UpdateModeSplit(float dt) {
     // 转场期间：冻结当前分裂状态（点击模式按钮后不回缩），不响应悬停/点击
-    if (SceneManager::Instance().IsTransitionActive()) {
+    if (Services::Get().Scenes().IsTransitionActive()) {
         modeHoverIndex = -1;
         modeHoverTimer = 0.0f;
         tipFade = std::max(0.0f, tipFade - dt * 10.0f);
@@ -395,7 +407,7 @@ void ReadyScene::UpdateModeSplit(float dt) {
     // 热区可交互性：分裂行区域只在已有分裂进度时接管（合并态让位给"开始游戏"本体，
     // 保持"必须先悬停本体才分裂"的门槛）；模式按钮只在完全分裂后参与
     startRowZone->SetEnabled(!upgradePanelOpen && modeSplitProgress > 0.001f);
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < (int)ModeRegistry::Instance().Size(); ++i)
         modeZones[i]->SetEnabled(!upgradePanelOpen && modeSplitProgress >= 0.999f);
 
     // 升级面板为模态覆盖层：强制收起并跳过交互
@@ -409,7 +421,7 @@ void ReadyScene::UpdateModeSplit(float dt) {
     } else {
         // ===== 悬停事实全部来自控件：本帧唯一被 UISystem 判为悬停的控件才是激活者 =====
         int hoverIdx = -1;
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < (int)ModeRegistry::Instance().Size(); ++i) {
             if (modeZones[i]->IsHovered()) { hoverIdx = i; break; }
         }
 
@@ -493,7 +505,7 @@ void ReadyScene::DrawSplitButtonPlate(float cx, float cy, float w, float h, floa
 void ReadyScene::DrawStartButtonRow() {
     if (modeSplitProgress <= 0.001f) return; // 完全合并：常规开始按钮由 ButtonSprite 绘制
 
-    const float WIN_WIDTH = (float)Config::GetInstance().GetScreenWidth();
+    const float WIN_WIDTH = (float)Services::Get().Cfg().GetScreenWidth();
     const float cx = WIN_WIDTH * 0.5f;
 
     const float p = modeSplitProgress;
@@ -507,19 +519,19 @@ void ReadyScene::DrawStartButtonRow() {
                              false, "开始游戏", UITheme::FontButton, mainAlpha);
     }
 
-    // ===== 三个模式按钮：自中心滑出 + 展宽 + 淡入 =====
+    // ===== 模式按钮：自中心滑出 + 展宽 + 淡入 =====
     const float subAlpha = std::clamp((p - 0.12f) / 0.55f, 0.0f, 1.0f);
     if (subAlpha > 0.01f) {
-        static const char* modeNames[3] = { "经典无尽", "限时冲刺", "风暴之夜" };
-        for (int i = 0; i < 3; ++i) {
-            const float fx = cx + (float)(i - 1) * (ModeSubBtnW + ModeSubBtnGap); // 最终中心
+        for (int i = 0; i < (int)ModeRegistry::Instance().Size(); ++i) {
+            const float fx = cx + ModeOffsetX(i) * (ModeSubBtnW + ModeSubBtnGap); // 最终中心
             const float bx = cx + (fx - cx) * e;                                  // 自中心滑出
             const float bw = 46.0f + (ModeSubBtnW - 46.0f) * e;                   // 逐渐展宽
             // 文字随按钮展宽浮现（过窄时先不显示，避免溢出）
             const float textAlpha = subAlpha *
                 std::clamp((bw - 70.0f) / (ModeSubBtnW - 70.0f), 0.0f, 1.0f);
             DrawSplitButtonPlate(bx, StartBtnY, bw, UITheme::MainBtnH, subAlpha,
-                                 modeHoverIndex == i, modeNames[i], 20.0f, textAlpha);
+                                 modeHoverIndex == i,
+                                 ModeRegistry::Instance().At((size_t)i).DisplayName(), 20.0f, textAlpha);
         }
     }
 }
@@ -528,20 +540,17 @@ void ReadyScene::DrawStartButtonRow() {
 void ReadyScene::DrawModeTipBox() {
     if (tipFade <= 0.01f || tipIndex < 0) return;
 
-    static const char* modeDescs[3] = {
-        "穿越风暴, 挑战最高分",
-        "60 秒冲分, 节奏更快",
-        "狂风与密集雷暴, 双倍得分的地狱模式",
-    };
+    if ((size_t)tipIndex >= ModeRegistry::Instance().Size()) return; // 越界不绘制，绝不读非法下标
 
     ImFont* font = UIBuilder::GetFont();
     if (!font) return;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    const float WIN_WIDTH = (float)Config::GetInstance().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
+    const float WIN_WIDTH = (float)Services::Get().Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
 
     const float fontSize = 15.0f;
-    const std::string text = modeDescs[tipIndex];
+    // 文案统一取自模式参数表，消除第二份并行数组
+    const std::string text = ModeRegistry::Instance().At((size_t)tipIndex).MenuDesc();
     ImVec2 ts = UIBuilder::CalcTextSize(text, fontSize);
     const float padX = 12.0f, padY = 9.0f;
     const float w = ts.x + padX * 2.0f;
@@ -549,7 +558,7 @@ void ReadyScene::DrawModeTipBox() {
 
     // 默认位于光标右侧并垂直居中；越过右边界时翻到左侧
     // 光标位置取自 UISystem（本帧快照）：控件侧不再直接读 Input
-    const Vec2 ptr = UISystem::Get().GetPointer();
+    const Vec2 ptr = Services::Get().UI().GetPointer();
     const float mx = ptr.x;
     const float my = ptr.y;
     float x0 = mx + 16.0f;
@@ -569,7 +578,12 @@ void ReadyScene::DrawModeTipBox() {
 }
 
 void ReadyScene::StartGameWithMode(int modeIndex) {
-    auto& sm = SceneManager::Instance();
+    // 下标 -> 枚举的隐式契约显式校验：漏放热区或下标错位会立即暴露，
+    // 而不是静默越界读到别的模式参数。
+    assert(modeIndex >= 0 && (size_t)modeIndex < ModeRegistry::Instance().Size());
+    if (modeIndex < 0 || (size_t)modeIndex >= ModeRegistry::Instance().Size()) return;
+
+    auto& sm = Services::Get().Scenes();
     if (sm.IsTransitionActive()) return; // 转场进行中不重复启动
 
     // 保持分裂展开状态（转场期间冻结、不回缩；返回主菜单时由 Reset 复位为单按钮），
@@ -581,14 +595,14 @@ void ReadyScene::StartGameWithMode(int modeIndex) {
 
     // 一行式意图：目标场景 + 对局参数 + 转场样式；路由、参数注入与转场编排全部在 SceneManager
     SceneArgs args;
-    args.gameMode = (GameMode)modeIndex;
+    args.gameMode = ModeRegistry::Instance().At((size_t)modeIndex).Key();
     std::cout << "Mode selected: " << modeIndex << ", starting transition..." << std::endl;
 
     // 以蝙蝠当前位置为圆心聚焦（主界面蝙蝠同位同尺寸，营造"同一只蝙蝠"的连续感）；
     // 精灵世界坐标 Y 向上，转场锚点用屏幕坐标（Y 向下），此处换算后随请求携带
     const auto& p = batSprite->GetPosition();
-    args.focusAnchorScreen = Vec2{ p.x, (float)Config::GetInstance().GetScreenHeight() - p.y };
-    sm.RequestScene(SceneId::Main, args, TransitionStyle::CircleFocus);
+    args.focusAnchorScreen = Vec2{ p.x, (float)Services::Get().Cfg().GetScreenHeight() - p.y };
+    sm.RequestScene(kSceneMain, args, kTransitionCircleFocus);
 }
 
 // ===== 护盾升级（B8）：右上角金币入口 + 升级面板 =====
@@ -596,7 +610,7 @@ void ReadyScene::StartGameWithMode(int modeIndex) {
 void ReadyScene::DrawUpgradeEntryButton() {
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     ImFont* font = UIBuilder::GetFont();
-    const float WIN_WIDTH = (float)Config::GetInstance().GetScreenWidth();
+    const float WIN_WIDTH = (float)Services::Get().Cfg().GetScreenWidth();
 
     // 奖杯图标（右上角，中心 WIN_WIDTH-52, 52）左侧的金币入口，与其同行贴顶对齐
     const float w = 176.0f, h = 44.0f;
@@ -622,7 +636,7 @@ void ReadyScene::DrawUpgradeEntryButton() {
 
     if (font) {
         // 持有数（图标右侧，金色）
-        std::string coinStr = std::to_string(PlayerProfile::Get().GetCoins());
+        std::string coinStr = std::to_string(Services::Get().Profile().GetCoins());
         dl->AddText(font, 17.0f, ImVec2(icx + 15.0f + 1, cy - 9.0f + 1),
                     ImGui::GetColorU32(ImVec4(0, 0, 0, 0.8f)), coinStr.c_str());
         dl->AddText(font, 17.0f, ImVec2(icx + 15.0f, cy - 9.0f),
@@ -643,11 +657,11 @@ void ReadyScene::DrawUpgradeEntryButton() {
 void ReadyScene::DrawUpgradePanelUI() {
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     ImFont* font = UIBuilder::GetFont();
-    const float WIN_WIDTH = (float)Config::GetInstance().GetScreenWidth();
-    const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
+    const float WIN_WIDTH = (float)Services::Get().Cfg().GetScreenWidth();
+    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
     const float cx = WIN_WIDTH * 0.5f;
 
-    auto& profile = PlayerProfile::Get();
+    auto& profile = Services::Get().Profile();
 
     // 全屏暗色遮罩（与模式选择覆盖层同款）
     dl->AddRectFilled(ImVec2(0.0f, 0.0f), ImVec2(WIN_WIDTH, WIN_HEIGHT),

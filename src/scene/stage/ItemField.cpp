@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "scene/stage/ItemField.h"
 #include "core/Config.h"
 #include "render/SpriteRenderer.h"
@@ -9,6 +10,7 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
 
 namespace {
 
@@ -34,24 +36,23 @@ void HsvToRgb(float h, float s, float v, float& r, float& g, float& b) {
 } // namespace
 
 const ItemField::Effect& ItemField::EffectOf(int itemType) {
-    static const Effect table[TypeCount] = {
-        /* 蚊子   */ { 1, 0.0f,              1, "+1",     UITheme::Amber.r, UITheme::Amber.g, UITheme::Amber.b, 22.0f },
-        /* 萤火虫 */ { 0, EnergyPerFirefly,  1, "能量+",  0.57f,            0.85f,            0.45f,            22.0f },
-        /* 猕猴桃 */ { 0, EnergyPerKiwi,     2, "能量++", 0.57f,            0.85f,            0.45f,            22.0f },
-    };
-    return table[itemType];
+    if (itemType < 0 || itemType >= (int)TypeCount) {
+        throw std::out_of_range(
+            "ItemField::EffectOf: 未知道具索引（检查 ItemCatalog 定义表）");
+    }
+    return ItemAt((size_t)itemType).effect;
 }
 
 void ItemField::Load() {
-    mosquitoes = ResourceManager::Get().GetSpriteList("mosquitoePool");
-    fireflies = ResourceManager::Get().GetSpriteList("fireflyPool");
-    kiwis = ResourceManager::Get().GetSpriteList("kiwiPool");
-    giantOrb = ResourceManager::Get().GetSprite("giantOrb");
+    for (int type = 0; type < (int)TypeCount; ++type) {
+        pools_[type] = Services::Get().Res().GetSpriteList(ItemAt((size_t)type).poolKey);
+    }
+    giantOrb = Services::Get().Res().GetSprite("giantOrb");
 }
 
 void ItemField::SetPickupHandler(std::function<void(int)> cb) {
     onPickup_ = std::move(cb);
-    for (int type = 0; type < TypeCount; ++type) {
+    for (int type = 0; type < (int)TypeCount; ++type) {
         for (auto& sp : *Pool(type)) {
             std::static_pointer_cast<CollectableSprite>(sp)->SetCallback([this, type]() {
                 if (onPickup_) onPickup_(type);
@@ -61,23 +62,21 @@ void ItemField::SetPickupHandler(std::function<void(int)> cb) {
 }
 
 std::vector<std::shared_ptr<Sprite>>* ItemField::Pool(int type) {
-    switch (type) {
-        case Mosquito: return &mosquitoes;
-        case Firefly:  return &fireflies;
-        default:       return &kiwis;
+    if (type < 0 || type >= (int)TypeCount) {
+        throw std::out_of_range("ItemField::Pool: 未知道具类型");
     }
+    return &pools_[type];
 }
 
 std::array<bool, ItemField::ItemPoolCap>* ItemField::Used(int type) {
-    switch (type) {
-        case Mosquito: return &mosquitoesUsed;
-        case Firefly:  return &fireflyUsed;
-        default:       return &kiwiUsed;
+    if (type < 0 || type >= (int)TypeCount) {
+        throw std::out_of_range("ItemField::Used: 未知道具类型");
     }
+    return &used_[type];
 }
 
 void ItemField::Reset() {
-    for (int type = 0; type < TypeCount; ++type) {
+    for (int type = 0; type < (int)TypeCount; ++type) {
         Used(type)->fill(false);
         for (auto& sp : *Pool(type)) sp->Reset();
     }
@@ -95,7 +94,7 @@ void ItemField::Update(float dt, const StageFrame& f) {
     const int leftBorder = -25;
 
     // 三类道具统一处理：随世界左移 -> 动画推进 -> 出界释放回对象池
-    for (int type = 0; type < TypeCount; ++type) {
+    for (int type = 0; type < (int)TypeCount; ++type) {
         auto& pool = *Pool(type);
         auto& used = *Used(type);
         for (size_t i = 0; i < pool.size() && i < used.size(); ++i) {
@@ -146,7 +145,7 @@ void ItemField::Update(float dt, const StageFrame& f) {
 }
 
 void ItemField::Render(SpriteRenderer& renderer) {
-    for (int type = 0; type < TypeCount; ++type) {
+    for (int type = 0; type < (int)TypeCount; ++type) {
         auto& pool = *Pool(type);
         auto& used = *Used(type);
         for (size_t i = 0; i < pool.size() && i < used.size(); ++i) {
@@ -160,7 +159,7 @@ void ItemField::Render(SpriteRenderer& renderer) {
 
 void ItemField::CheckPickup(Vec2 batPos, Vec2 batScale) {
     // 三类道具统一轮询（碰撞命中时由 CollectableSprite 内部触发拾取回调）
-    for (int type = 0; type < TypeCount; ++type) {
+    for (int type = 0; type < (int)TypeCount; ++type) {
         auto& pool = *Pool(type);
         auto& used = *Used(type);
         for (size_t i = 0; i < pool.size() && i < used.size(); ++i) {
@@ -206,7 +205,7 @@ void ItemField::TrySpawnCorridor(float leftColumnX, float rightColumnX, const St
 }
 
 bool ItemField::GenerateAt(int type, Vec2 position) {
-    if (type < 0 || type >= TypeCount) return false;
+    if (type < 0 || type >= (int)TypeCount) return false;
     auto& pool = *Pool(type);
     auto& used = *Used(type);
     for (size_t i = 0; i < pool.size() && i < used.size(); ++i) {
@@ -219,18 +218,23 @@ bool ItemField::GenerateAt(int type, Vec2 position) {
 }
 
 void ItemField::GenItem(Vec2 position, int tier) {
-    float indicator = Random::Get().GetRandomFloat();
-    // 高难度阶段提升能量道具占比（风险对冲）：kiwi 10%->15%，蚊子 50%->45%
-    bool highTier = tier >= 5;
-    float kiwiThreshold = highTier ? 0.85f : 0.90f;
-    float fireflyThreshold = highTier ? 0.45f : 0.50f;
-    if (indicator > kiwiThreshold) {
-        if (!GenerateAt(Kiwi, position)) {
-            if (!GenerateAt(Firefly, position)) GenerateAt(Mosquito, position);
-        }
-    } else if (indicator > fireflyThreshold) {
-        if (!GenerateAt(Firefly, position)) GenerateAt(Mosquito, position);
-    } else {
-        GenerateAt(Mosquito, position);
+    // 权重表驱动：新增道具只需在 ItemCatalog 加一行并给出两个权重，
+    // 不再有绑定道具数量的阈值分支与手写失败回退链。
+    const bool highTier = tier >= 5;
+    float totalWeight = 0.0f;
+    for (int type = 0; type < (int)TypeCount; ++type)
+        totalWeight += ItemWeight((size_t)type, highTier);
+
+    float roll = Random::Get().GetRandomFloat() * totalWeight;
+    int chosen = (int)TypeCount - 1;
+    for (int type = 0; type < (int)TypeCount; ++type) {
+        const float w = ItemWeight((size_t)type, highTier);
+        if (roll < w) { chosen = type; break; }
+        roll -= w;
+    }
+
+    // 选中类型的对象池已满时依次尝试其它类型，保证走廊里仍有道具
+    for (int k = 0; k < (int)TypeCount; ++k) {
+        if (GenerateAt((chosen + k) % (int)TypeCount, position)) return;
     }
 }

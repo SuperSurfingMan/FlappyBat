@@ -1,5 +1,5 @@
 #pragma once
-#include "gameplay/GameMode.h"
+#include "gameplay/ModeDefinition.h"
 #include "gameplay/StageParams.h"
 #include <cstddef>
 
@@ -16,8 +16,8 @@ class RunFlow {
 public:
     enum class IntroPhase { None, Mask, Counting };
 
-    void SetMode(GameMode m) { mode_ = m; }
-    GameMode Mode() const { return mode_; }
+    void SetMode(ModeKey key) { mode_ = key; }
+    ModeKey Mode() const { return mode_; }
 
     void Reset(const ModeParams& p);
     void OnEnter(bool maskActive);
@@ -69,7 +69,7 @@ public:
     static constexpr int   ComboMaxBonus = 3;
 
 private:
-    GameMode mode_ = GameMode::Classic;
+    ModeKey mode_ = kDefaultModeKey;
     size_t score_ = 0;
     int lastTier_ = 0;
     float timeLeft_ = kTimeRushDuration;

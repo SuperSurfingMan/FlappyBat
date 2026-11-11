@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "scene/stage/ObstacleField.h"
 #include "gameplay/Collision.h"
 #include "core/Config.h"
@@ -6,20 +7,22 @@
 #include "sprite/Sprite.h"
 #include "sprite/BatSprite.h"
 #include "audio/AudioSystem.h"
-#include "enemy/IStageFeedback.h"
+#include "enemy/IStageServices.h"
 #include "ui/UITheme.h"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 
-void ObstacleField::Load() {
-    // 初始化 UV 坐标，用于碰撞检测
-    upCollisionUV = ResourceManager::Get().GetUVcords3("obstacleUp");
-    downCollisionUV = ResourceManager::Get().GetUVcords3("obstacleDown");
-    batCollisionUV = ResourceManager::Get().GetUVcords2("bat");
+void ObstacleField::Load(Config& cfg, ResourceManager& res) {
+    cfg_ = &cfg;
 
-    obstaclesUpPool = ResourceManager::Get().GetSpriteList("obstaclesUpPool");
-    obstaclesDownPool = ResourceManager::Get().GetSpriteList("obstaclesDownPool");
+    // 初始化 UV 坐标，用于碰撞检测
+    upCollisionUV = res.GetUVcords3("obstacleUp");
+    downCollisionUV = res.GetUVcords3("obstacleDown");
+    batCollisionUV = res.GetUVcords2("bat");
+
+    obstaclesUpPool = res.GetSpriteList("obstaclesUpPool");
+    obstaclesDownPool = res.GetSpriteList("obstaclesDownPool");
 }
 
 void ObstacleField::Reset(const StageFrame& f) {
@@ -42,9 +45,9 @@ void ObstacleField::Reset(const StageFrame& f) {
     }
 
     const float GAP_SIZE = gapSize_; // 难度递进：初始为第 0 档间隙
-    const float SAFE_MARGIN = Config::GetInstance().GetSafeMargin();
+    const float SAFE_MARGIN = cfg().GetSafeMargin();
 
-    float obs_start_x = screenW_ + Config::GetInstance().GetObstacleWidth() / 2; // 从屏幕右边开始生成
+    float obs_start_x = screenW_ + cfg().GetObstacleWidth() / 2; // 从屏幕右边开始生成
     float gap_center = (screenH_ - terrainY_) * 0.5f + terrainY_; // 初始 gap 中心固定为正中心
 
     float prevColumnX = -1.0f; // 上一列障碍物中心（用于在列间走廊生成道具）
@@ -71,13 +74,13 @@ void ObstacleField::Reset(const StageFrame& f) {
         }
         prevColumnX = obs_start_x;
 
-        float spacing = Config::GetInstance().GetSpacingRange().first +
+        float spacing = cfg().GetSpacingRange().first +
             Random::Get().GetRandomFloat() *
-            (Config::GetInstance().GetSpacingRange().second - Config::GetInstance().GetSpacingRange().first);
+            (cfg().GetSpacingRange().second - cfg().GetSpacingRange().first);
         obs_start_x += spacing;
-        float delta = Config::GetInstance().GetGapCenterDeltaRange().first +
+        float delta = cfg().GetGapCenterDeltaRange().first +
             Random::Get().GetRandomFloat() *
-            (Config::GetInstance().GetGapCenterDeltaRange().second - Config::GetInstance().GetGapCenterDeltaRange().first);
+            (cfg().GetGapCenterDeltaRange().second - cfg().GetGapCenterDeltaRange().first);
         gap_center += delta;
     }
     lastSpawnedGapCenter = gap_center; // 供飞行回收重插入时衔接
@@ -97,8 +100,8 @@ void ObstacleField::Update(float dt, const StageFrame& f) {
 }
 
 void ObstacleField::ScrollAndScore(float dt, const StageFrame& f) {
-    const float HALF_WIDTH = Config::GetInstance().GetObstacleWidth() * 0.5f;
-    const float SAFE_MARGIN = Config::GetInstance().GetSafeMargin();
+    const float HALF_WIDTH = cfg().GetObstacleWidth() * 0.5f;
+    const float SAFE_MARGIN = cfg().GetSafeMargin();
 
     const float move = f.obstacleSpeed * dt;
     oscillTime += dt; // 摆动变体全局时钟
@@ -125,10 +128,10 @@ void ObstacleField::ScrollAndScore(float dt, const StageFrame& f) {
 
         // 计分：越过屏幕中心线 +1（锚点固定，不受蝙蝠横移影响）
         if (pairWhole && up->GetPosition().x >= screenW_ * 0.5f && newX < screenW_ * 0.5f) {
-            if (fx_) {
-                fx_->AddScore(1); // 统一入口：含模式倍率与成就上报
-                fx_->ReportAchievement(AchievementEvent::PipePassed, 1);
-                fx_->PlaySFX((int)SFX::Point, 0.9f);
+            if (fxFx_ && economy_) {
+                economy_->AddScore(1); // 统一入口：含模式倍率与成就上报
+                economy_->ReportAchievement("pipe_passed", 1);
+                fxFx_->PlaySFX((int)SFX::Point, 0.9f);
             }
         }
 
@@ -146,10 +149,10 @@ void ObstacleField::ScrollAndScore(float dt, const StageFrame& f) {
             float minClearance = std::min(clearanceLower, clearanceUpper);
             if (minClearance >= 0.0f && minClearance < NearMissThreshold) {
                 runNearMissCount++;
-                if (fx_) {
-                    fx_->AddScore(NearMissBonus);
-                    fx_->ReportAchievement(AchievementEvent::NearMissRun, runNearMissCount);
-                    fx_->FloatTextAt("贴脸 +" + std::to_string(NearMissBonus),
+                if (fxFx_ && economy_) {
+                    economy_->AddScore(NearMissBonus);
+                    economy_->ReportAchievement("near_miss_run", runNearMissCount);
+                    fxFx_->FloatTextAt("贴脸 +" + std::to_string(NearMissBonus),
                                      batPos + Vec2(0.0f, 40.0f),
                                      UITheme::Moonlight.r, UITheme::Moonlight.g,
                                      UITheme::Moonlight.b, 22.0f, 1.0f);
@@ -174,7 +177,7 @@ void ObstacleField::ScrollAndScore(float dt, const StageFrame& f) {
 }
 
 void ObstacleField::RecycleColumns(const StageFrame& f) {
-    const float HALF_WIDTH = Config::GetInstance().GetObstacleWidth() * 0.5f;
+    const float HALF_WIDTH = cfg().GetObstacleWidth() * 0.5f;
 
     // ===== 2. recycle（按实际位置求最左/最右「未飞行」管道；飞行回收会打破计数器顺序） =====
     size_t leftmostIdx = SIZE_MAX;
@@ -196,9 +199,9 @@ void ObstacleField::RecycleColumns(const StageFrame& f) {
 
     if (leftmostIdx != SIZE_MAX && minX < -(HALF_WIDTH + 0.00001f)) {
         float rightMostX = RightmostLivePipeX(leftmostIdx);
-        float spacing = Config::GetInstance().GetSpacingRange().first +
+        float spacing = cfg().GetSpacingRange().first +
             Random::Get().GetRandomFloat() *
-            (Config::GetInstance().GetSpacingRange().second - Config::GetInstance().GetSpacingRange().first);
+            (cfg().GetSpacingRange().second - cfg().GetSpacingRange().first);
         float newX = (rightMostX < -9e8f)
             ? screenW_ + 300.0f // 无其它存活列：退到屏幕外右侧
             : rightMostX + spacing;
@@ -258,7 +261,7 @@ bool ObstacleField::CheckCollision(Vec2 batPos, Vec2 batScale) const {
 
 int ObstacleField::SmashOverlapping(Vec2 center, float halfSize) {
     int smashed = 0;
-    const float OBS_HALF = Config::GetInstance().GetObstacleWidth() * 0.5f;
+    const float OBS_HALF = cfg().GetObstacleWidth() * 0.5f;
     for (size_t i = 0; i < obstaclesUpPool.size() && i < flyingStates.size(); ++i) {
         const auto& fly = flyingStates[i];
         if (fly.up.flying && fly.down.flying) continue; // 整列都在飞
@@ -302,11 +305,11 @@ void ObstacleField::SmashObstacles(size_t i, bool smashUp, bool smashDown) {
     }
 
     runSmashCount += (smashUp ? 1 : 0) + (smashDown ? 1 : 0); // 按根计数
-    if (fx_) {
-        fx_->ReportAchievement(AchievementEvent::SmashRun, runSmashCount);
-        fx_->PlaySFX((int)SFX::Thunder, 1.0f); // 撞击音效
-        fx_->Shake(12.0f);
-        fx_->FloatTextAt("撞飞！", Vec2(
+    if (fxFx_ && economy_) {
+        economy_->ReportAchievement("smash_run", runSmashCount);
+        fxFx_->PlaySFX((int)SFX::Thunder, 1.0f); // 撞击音效
+        fxFx_->Shake(12.0f);
+        fxFx_->FloatTextAt("撞飞！", Vec2(
             (obstaclesUpPool[i]->GetPosition().x + obstaclesDownPool[i]->GetPosition().x) * 0.5f,
             (obstaclesUpPool[i]->GetPosition().y + obstaclesDownPool[i]->GetPosition().y) * 0.5f + 70.0f),
             0.95f, 0.75f, 0.4f, 24.0f, 1.0f);
@@ -365,9 +368,9 @@ void ObstacleField::UpdateFlying(float dt, const StageFrame& f) {
         // 同帧双结束时上管先重插、下管随即贴回，等效于旧的整列回收
         auto recycleAsNewColumn = [this, i](bool isUp) {
             float rightMostX = RightmostLivePipeX(i); // 本对两管此刻都非「存活锚点」，天然排除
-            float spacing = Config::GetInstance().GetSpacingRange().first +
+            float spacing = cfg().GetSpacingRange().first +
                 Random::Get().GetRandomFloat() *
-                (Config::GetInstance().GetSpacingRange().second - Config::GetInstance().GetSpacingRange().first);
+                (cfg().GetSpacingRange().second - cfg().GetSpacingRange().first);
             float newX = (rightMostX < -9e8f)
                 ? screenW_ + 300.0f
                 : rightMostX + spacing;
@@ -420,7 +423,7 @@ void ObstacleField::ReinsertFlyingPipe(size_t i, bool isUp, float newX) {
 }
 
 void ObstacleField::RollColumnState(size_t i) {
-    const float SAFE_MARGIN = Config::GetInstance().GetSafeMargin();
+    const float SAFE_MARGIN = cfg().GetSafeMargin();
     const float GAP_SIZE = gapSize_;
 
     // ---- 抽取变体：普通 / 摆动 / 窄间隙 ----
@@ -429,9 +432,9 @@ void ObstacleField::RollColumnState(size_t i) {
     st.gapSize = (st.type == 2) ? NarrowGapOf(GAP_SIZE) : GAP_SIZE;
 
     // ---- 平滑随机 gap（衔接上一生成中心，按该变体间隙约束） ----
-    float delta = Config::GetInstance().GetGapCenterDeltaRange().first +
+    float delta = cfg().GetGapCenterDeltaRange().first +
         Random::Get().GetRandomFloat() *
-        (Config::GetInstance().GetGapCenterDeltaRange().second - Config::GetInstance().GetGapCenterDeltaRange().first);
+        (cfg().GetGapCenterDeltaRange().second - cfg().GetGapCenterDeltaRange().first);
     lastSpawnedGapCenter += delta;
 
     float minCenter = SAFE_MARGIN + st.gapSize * 0.5f + terrainY_;
@@ -468,7 +471,7 @@ int ObstacleField::RollObstacleVariant() const {
 
 void ObstacleField::ApplyObstacleGeometryPipe(size_t i, bool isUp, float x,
                                               float gapCenter, float gapSize) {
-    const float OBS_WIDTH = Config::GetInstance().GetObstacleWidth();
+    const float OBS_WIDTH = cfg().GetObstacleWidth();
     if (isUp) {
         float upHeight = screenH_ - (gapCenter + gapSize * 0.5f);
         obstaclesUpPool[i]->SetScale(OBS_WIDTH, upHeight);

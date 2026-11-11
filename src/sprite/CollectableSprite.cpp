@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "sprite/CollectableSprite.h"
 #include "render/Animation.h"
 #include "res/ResourceManager.h"
@@ -12,7 +13,7 @@ void CollectableSprite::OnCollide() {
     if (!isCollected) {
         if (callback) callback();
         // 收集道具音效
-        AudioSystem::Instance().PlaySFX(SFXToFile(SFX::Collect), 0.9f);
+        Services::Get().Audio().PlaySFX(SFXToFile(SFX::Collect), 0.9f);
         // 当前问题: 摸到item之后动画直接没了 已解决
         SwitchToAnimation(1);
         std::cout << animation.get() << std::endl;
@@ -48,22 +49,25 @@ bool CollectableSprite::CheckCollision(const Vec2& position, const Vec2& scale) 
     return false;
 }
 
-void CollectableSprite::InitAnimations(std::string type, size_t normal_tex_row, size_t normal_tex_col) {
-    std::shared_ptr<Texture2D> normalSpritesheet = ResourceManager::Get().GetTexture2D(type);
+void CollectableSprite::InitAnimations(std::string type, size_t normal_tex_row,
+                                       size_t normal_tex_col, int disappearFrames) {
+    std::shared_ptr<Texture2D> normalSpritesheet = Services::Get().Res().GetTexture2D(type);
     std::string disappearTextureKey = type + "Disappear";
-    std::shared_ptr<Texture2D> disappearSpritesheet = ResourceManager::Get().GetTexture2D(disappearTextureKey);
-    if (!normalSpritesheet || !disappearSpritesheet) return;
+    std::shared_ptr<Texture2D> disappearSpritesheet = Services::Get().Res().GetTexture2D(disappearTextureKey);
+    if (!normalSpritesheet || !disappearSpritesheet) {
+        // 贴图键是运行时拼串约定（<type> / <type>Disappear）。缺一个原先会静默 return，
+        // 表现为「道具永远不显示且无报错」；现在显式指出是哪个键没登记。
+        std::cerr << "[CollectableSprite] 贴图键未登记: \"" << type
+                  << "\" 或 \"" << disappearTextureKey
+                  << "\"，该道具无法显示（请检查 ResourceManager 资源清单）" << std::endl;
+        return;
+    }
 
     normalAnimation = std::make_unique<Animation>(true, false);
     normalAnimation->InitAnimationUV(normalSpritesheet, normal_tex_row, normal_tex_col);
 
     triggerAnimation = std::make_unique<Animation>(false, true);
-    if (type == "kiwi") {
-        triggerAnimation->InitAnimationUV(disappearSpritesheet, 6);
-    }
-    else {
-        triggerAnimation->InitAnimationUV(disappearSpritesheet, 8);
-    }
+    triggerAnimation->InitAnimationUV(disappearSpritesheet, (size_t)disappearFrames);
     triggerAnimation->setOnAnimationFinished([this](){
         setActive(false);
     });

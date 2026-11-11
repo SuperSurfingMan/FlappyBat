@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "scene/stage/StageHud.h"
 #include "core/Config.h"
 #include "ui/UIWidget.h"
@@ -48,8 +49,8 @@ constexpr float HudGroupGap     = 10.0f; // 能量组与俯冲长条的并排间
 constexpr float HudBottomGroupW = HudIconSize + HudBarGap + HudBarW + HudGroupGap + DiveBarW;
 constexpr float HudBottomMargin = 12.0f; // 底部行距窗口底边（以组内最高的能量图标计）
 // 底部单行中心 y：全行元素垂直居中
-float BottomRowCy() {
-    return (float)Config::GetInstance().GetScreenHeight() - HudBottomMargin - HudIconSize * 0.5f;
+float BottomRowCy(float screenH) {
+    return screenH - HudBottomMargin - HudIconSize * 0.5f;
 }
 
 // 沿圆角矩形周长自顶部中点顺时针描边 frac 比例（俯冲长条的冷却环绕动画）
@@ -104,13 +105,12 @@ void StrokeRoundedRectPerimeter(ImDrawList* dl, ImVec2 pmin, ImVec2 pmax,
 
 } // namespace
 
-void StageHud::GetEnergyIconRect(float& cx, float& cy, float& size) {
+void StageHud::GetEnergyIconRect(const Snapshot& s, float& cx, float& cy, float& size) {
     // 布局：窗口底部中央并排一行，能量组（图标+槽）在左、俯冲长条在右，整组水平居中；
     // 绘制与点击判定共用此几何
     size = HudIconSize;
-    cx = (float)Config::GetInstance().GetScreenWidth() * 0.5f
-         - HudBottomGroupW * 0.5f + size * 0.5f;
-    cy = BottomRowCy();
+    cx = s.screenW * 0.5f - HudBottomGroupW * 0.5f + size * 0.5f;
+    cy = BottomRowCy(s.screenH);
 }
 
 void StageHud::DrawPrimary(const Snapshot& s, UIWidget& energyIcon) {
@@ -167,7 +167,7 @@ void StageHud::DrawEnergy(const Snapshot& s, UIWidget& energyIcon) {
 
     // ===== 布局：窗口底部中央并排一行，能量组（图标+槽）在俯冲长条左侧 =====
     float iconSize, iconCx, rowY;
-    GetEnergyIconRect(iconCx, rowY, iconSize);
+    GetEnergyIconRect(s, iconCx, rowY, iconSize);
     const float barX0 = iconCx + iconSize * 0.5f + HudBarGap; // 图标右缘 + 6
     const float barW = HudBarW;
     const float barH = 26.0f;
@@ -295,9 +295,8 @@ void StageHud::DrawDive(const Snapshot& s) {
     // 长条底板：窗口底部中央并排一行，位于能量组右侧（整组水平居中）
     const float w = DiveBarW;
     const float h = DiveBarH;
-    const float cx = (float)Config::GetInstance().GetScreenWidth() * 0.5f
-                     + HudBottomGroupW * 0.5f - w * 0.5f;
-    const float cy = BottomRowCy();
+    const float cx = s.screenW * 0.5f + HudBottomGroupW * 0.5f - w * 0.5f;
+    const float cy = BottomRowCy(s.screenH);
 
     const bool ready = s.diveCooldown <= 0.0f && !s.diving;
     const bool diving = s.diving;
@@ -337,7 +336,7 @@ void StageHud::DrawDive(const Snapshot& s) {
 
 void StageHud::DrawModeTimer(const Snapshot& s) {
     if (!s.timed) return;
-    const float WIN_WIDTH = (float)Config::GetInstance().GetScreenWidth();
+    const float WIN_WIDTH = s.screenW;
     char buf[16];
     snprintf(buf, sizeof(buf), "%.1f", std::max(0.0f, s.timeLeft));
     ImU32 col = (s.timeLeft <= 10.0f)
@@ -349,7 +348,7 @@ void StageHud::DrawModeTimer(const Snapshot& s) {
 
 void StageHud::DrawCombo(const Snapshot& s) {
     if (s.comboCount < 2 || s.comboTimer <= 0.0f) return;
-    const float WIN_WIDTH = (float)Config::GetInstance().GetScreenWidth();
+    const float WIN_WIDTH = s.screenW;
     float frac = s.comboTimer / s.comboWindow; // 剩余窗口比例，越少越透明
     ImU32 col = UITheme::ToImU32(UITheme::Amber, 0.35f + 0.65f * frac);
     // 非限时模式紧随金币栏（y60）；限时模式移至能量行下方（y140）避让倒计时（y 来自模式参数表）
@@ -359,7 +358,7 @@ void StageHud::DrawCombo(const Snapshot& s) {
 
 void StageHud::DrawCountdown(const Snapshot& s) {
     if (!s.counting) return;
-    const float WIN_WIDTH = (float)Config::GetInstance().GetScreenWidth();
+    const float WIN_WIDTH = s.screenW;
     // 数字弹跳入场：前 35% 时间从 1.35 倍缩到 1.0 并淡入
     float popT = std::clamp(s.countdownTimer / (s.countdownStep * 0.35f), 0.0f, 1.0f);
     float scale = 1.35f - 0.35f * popT;

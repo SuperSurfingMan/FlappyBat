@@ -1,3 +1,4 @@
+#include "app/Services.h"
 #include "scene/stage/FeedbackFx.h"
 #include "core/Config.h"
 #include "ui/UIBuilder.h"
@@ -57,7 +58,7 @@ void FeedbackFx::Draw() const {
     ImFont* font = UIBuilder::GetFont();
     if (!font) return;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    const float WIN_HEIGHT = (float)Config::GetInstance().GetScreenHeight();
+    const float WIN_HEIGHT = (float)Services::Get().Cfg().GetScreenHeight();
     for (const auto& ft : floatingTexts) {
         float alpha = std::clamp(ft.life / ft.totalLife, 0.0f, 1.0f);
         ImVec2 ts = UIBuilder::CalcTextSize(ft.text, ft.fontSize);

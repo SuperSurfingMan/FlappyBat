@@ -32,22 +32,44 @@
 ```
 src/
 ├── main.cpp            # 程序入口
-├── app/                # 组合根：Application 主循环、排行榜、统一存档
+├── app/                # 组合根：Application / Services 服务上下文 / 排行榜 / 存档 / 启动校验
 ├── audio/              # AudioSystem：miniaudio 封装（BGM / 音效）
 ├── core/               # 基础库：Vec2 数学、Config 全局配置、Input、Timer
 ├── enemy/              # 怪物框架：导演 + 内置怪物登记 + 枭王实现
-├── gameplay/           # 玩法域共享概念：GameMode、StageParams、SAT 碰撞检测
+├── gameplay/           # 模式策略 IGameMode / ModeRegistry / ItemCatalog / 参数 / SAT 碰撞
 ├── layer/              # 屏幕覆盖层：LayerStack（主界面 UI 层 / 结算层 / Toast 层）
 ├── render/             # GL 基础设施：Shader、VAO/VBO、Texture2D、Animation、
 │                       #   SpriteRenderer、InstancedQuadRenderer、雨/风/闪电渲染器
-├── res/                # ResourceManager 资源管理 + stb / miniaudio 加载翻译单元
-├── scene/              # 场景管理（注册表寻址、圆形聚焦转场）与六大场景
-│   └── stage/          # 局内玩法子系统：RunFlow、障碍场、道具场、天气导演、HUD 等
+├── res/                # ManifestReader / ResourceCatalog 清单 + ResourceManager + stb/miniaudio
+├── scene/              # 场景管理（SceneKey 键值注册表、转场工厂）+ 六大场景
+│   └── stage/          # 局内玩法子系统：RunFlow、障碍场、道具场、天气导演、
+│                       #   视差层 ParallaxField、局末结算 RunSettlement、HUD 等
 ├── sprite/             # 精灵体系：Sprite 基类与蝙蝠 / 按钮 / 收集物等派生
 └── ui/                 # 推送式 UI 事件派发内核（UISystem / UIWidget / FontManager 等）
 ```
 
 整体架构：`Application`（GLFW / GLAD / ImGui 初始化 + 帧循环）驱动 `SceneManager`，场景内组合精灵体系、覆盖层与各玩法子系统；渲染侧为「渲染器 + 槽位分发」管线（见 `src/render/WorldSlot.h`）。
+
+### 扩展指南（数据驱动的扩展点）
+
+| 要新增 | 只需做什么 |
+|--------|-----------|
+| 游戏模式 | 在 `src/gameplay/ModeRoster.cpp` 的 `kBuiltinModes` 加一条 `ModeDefinition`；需要特殊行为时另实现 `IGameMode` 并注册。菜单按钮、排行榜页签、分段存档、模式专属成就、参数读取全部由 `ModeRegistry` 自动派生。**注册序必须追加在末尾**，否则旧 `score.dat` 的各段会被解释成别的模式。 |
+| 可收集道具 | 在 `src/gameplay/ItemCatalog.h` 加一条 `ItemDefinition` 并放入两张贴图。贴图登记、精灵池、动画网格、拾取效果与生成权重自动派生。 |
+| 怪物 | 见 `docs/怪物系统架构设计.md §9`（实现 `IEnemy` + `EnemyRoster.cpp` 一行注册）。 |
+| 场景 | 在 `Application::Init` 里 `Register(kSceneYourScene, 实例)` 一行。场景键是开放字符串（`src/scene/SceneKey.h`），不再有需要全体重编译的场景枚举；未注册的键会在 `RequestScene` 处指名报错。 |
+| 转场 / 天气渲染器 | 实现 `ISceneTransition` / `IRenderer` 后，在 `main.cpp` 组合根或 `WeatherRendererRoster.cpp` 加一行注册。转场样式同样是开放字符串键（`kTransitionCircleFocus` 等）。 |
+| 成就事件 | 往 `Achievements::Rules()` 规则表加一行，无需扩枚举或加 `case`。 |
+
+进程启动时会执行 `ValidateDataTables()`（见 `src/app/DataIntegrity.cpp`），遍历注册表校验模式参数、道具定义、成就规则、音效路径与怪物调参，任一表项缺失都会拒绝启动并指出具体位置。
+
+### 运行时清单与服务装配
+
+- `assets/manifests/textures.txt` 与 `assets/manifests/sfx.txt` 是纹理 / 音效路径的运行时清单（TAB 分隔，支持 `#` 注释与 `[section]` 段）。文件缺失、段不完整或格式错误时自动回退到 `ResourceCatalog.h` / `SFXCatalog.cpp` 的内置常量表，单独拷出 exe 也不会因缺配置而崩溃。
+- `src/app/Services.h` 是统一服务上下文：组合根在 `main()` 里调用 `Services::Install()` 一次性装配 9 个服务实例，业务代码只经 `Services::Get()` 访问。构造顺序集中可见，也是后续改造成构造器注入的唯一改造点。
+- `src/enemy/IStageServices.h` 按接口隔离拆成 `IFeedbackFx` / `IRunEconomy` / `IPlayerCommands` 三个角色接口；新怪物或新子系统只需依赖自己用到的那个。组合胖接口 `IStageFeedback` 已移除，`MainScene` 直接实现三者。
+- 子系统依赖改为注入：`ObstacleField::Load(Config&, ResourceManager&)` 不再自查全局；`StageHud` 的画布尺寸随 `Snapshot` 下发，HUD 可脱离运行环境用任意尺寸构造验证。
+- 局末结算（破纪录判定 / 写榜 / 金币折算）抽到 `scene/stage/RunSettlement.cpp`，以值对象 `SettlementResult` 返回，场景只负责演出，因此可单测。
 
 ## 第三方依赖
 
@@ -127,6 +149,15 @@ build\demo.exe          # cmd / PowerShell
 ```
 
 窗口大小固定为 540 × 960。首次运行后会在工作目录生成 `player_save.dat`（金币 / 科技树 / 成就 / 音量）与 `score.dat`（排行榜）等存档文件。
+
+### 4.1 运行数据表自测（可选）
+
+```bash
+cmake --build build --target demo_data_tests
+./build/demo_data_tests.exe          # 或：ctest --test-dir build --output-on-failure
+```
+
+自测不依赖 OpenGL / ImGui，覆盖模式数量与并行表的一致性、越界访问是否明确报错、音效路径表完整性，以及 `score.dat` 旧版单榜 / 分段格式 / 旧档段数不足时的读取兼容。主程序启动时也会执行 `ValidateDataTables()`，任何表项缺失都会直接拒绝启动并指出具体位置。
 
 ### 5. 用 VS Code 开发（可选）
 

@@ -3,6 +3,8 @@
 #include "ui/UIWidget.h"   // 内联热区控件（分裂行/模式按钮/升级面板）需完整类型
 #include "ui/GameInput.h"  // 作为 IGameInputSink 订阅推送式输入（ESC 关面板）
 #include "ui/InputScope.h" // 主菜单组（非模态）+ 升级面板（模态）
+#include "gameplay/ModeRegistry.h" // 模式热区数量由注册表动态给出
+#include <array>
 #include <vector>
 #include <memory>
 
@@ -82,8 +84,8 @@ private:
     // 标量在声明处创建，数组在 InitButtons 的现有循环里逐个创建后登记。
     std::shared_ptr<UIWidget> startRowZone = std::make_shared<UIWidget>();
                                         // 分裂后维持展开的整行区域（无自身绘制）
-    std::shared_ptr<UIWidget> modeZones[3];
-                                        // 三个模式按钮热区（InitButtons 中创建）
+    std::vector<std::shared_ptr<UIWidget>> modeZones;
+                                        // 模式按钮热区（InitButtons 中按注册表大小创建）
     std::shared_ptr<UIWidget> coinEntry = std::make_shared<UIWidget>();
                                         // 右上角金币入口（打开升级面板）
     std::shared_ptr<UIWidget> buyZones[2];
@@ -97,7 +99,7 @@ private:
     void DrawSplitButtonPlate(float cx, float cy, float w, float h, float alpha,
                               bool hovered, const char* text, float fontSize,
                               float textAlpha); // 带整体透明度的按钮底板（动效专用）
-    void StartGameWithMode(int modeIndex); // 0 经典 / 1 限时冲刺 / 2 风暴之夜
+    void StartGameWithMode(int modeIndex); // 下标 -> ModeRegistry::At(i).Key()，不再是枚举强转
 
     // ===== 护盾升级覆盖层（B8）：金币入口按钮 + 升级面板 =====
     bool upgradePanelOpen = false;

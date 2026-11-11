@@ -1,4 +1,5 @@
 #pragma once
+#include "app/Services.h"
 #include "ui/UISystem.h"
 #include <vector>
 
@@ -30,7 +31,7 @@ private:
     };
 
     void Apply(const Binding& binding) const {
-        UISystem& ui = UISystem::Get();
+        UISystem& ui = Services::Get().UI();
         if (enabled_) {
             // 先启用组、再压栈：保证模态在栈上时组已经是可命中的
             ui.SetGroupEnabled(binding.id, true);

@@ -1,4 +1,5 @@
 #pragma once
+#include "app/Services.h"
 #include "scene/Scene.h"
 #include <algorithm>
 #include <memory>
@@ -7,12 +8,14 @@
 #include <array>
 
 #include "core/Config.h"
-#include "gameplay/GameMode.h"
-#include "gameplay/StageParams.h"        // 模式参数表（与天气子系统共用的事实源）
+#include "gameplay/ModeRegistry.h"      // IGameMode / ParamsOf(ModeKey)
+#include "gameplay/StageParams.h"        // 模式参数兼容头（与天气子系统共用）
 #include "ui/UIWidget.h"          // 局内 HUD 热区控件（能量图标）需完整类型
 #include "ui/GameInput.h"        // 玩法输入快照与接收接口（蝙蝠操控由 UISystem 推送）
 #include "ui/InputScope.h"       // 能量图标组的启用/禁用（与模态约束一致）
 #include "layer/LayerStack.h"    // 屏幕覆盖层组合容器
+#include "scene/stage/ParallaxField.h"      // 背景/前景/地面三段视差滚动
+#include "scene/stage/RunSettlement.h"      // 局末结算规则（纯规则，返回结果值对象）
 #include "scene/stage/StageHud.h"          // 常驻 HUD 绘制（纯绘制，快照驱动）
 #include "scene/stage/FeedbackFx.h"        // 飘字与全局抖动（纯表现）
 #include "scene/stage/WeatherDirector.h"   // 阵风/落雷/消息盒/天色（IRenderer 注册表：雨/雷/风）
@@ -22,14 +25,20 @@
 #include "scene/stage/ItemField.h"        // 道具池/生成/拾取/巨化星
 #include "scene/stage/RunFlow.h"          // 模式/分数/连击/限时/入场/门控
 #include "enemy/EnemyDirector.h"     // 怪物框架（含 IEnemy/EncounterRules 契约）
-#include "enemy/IStageFeedback.h"    // MainScene 实现表现服务接口（需完整类型）
+#include "enemy/IStageServices.h"    // 三个角色接口（MainScene 分别实现，不再有组合胖接口）
 
 class MainSceneUILayer;
 class MainSceneOverLayer;
 class ToastLayer;
 struct RenderContext;
 
-class MainScene : public Scene, public IStageFeedback, public IGameInputSink {
+// 场景向外的三种能力分别实现为三个角色接口（ISP）：怪物/子系统只取自己用得到的那个，
+// 本场景也不需要再为「一个胖接口」实现一堆互不相关的方法。
+class MainScene : public Scene,
+                  public IFeedbackFx,
+                  public IRunEconomy,
+                  public IPlayerCommands,
+                  public IGameInputSink {
 public:
     MainScene();
     ~MainScene();
@@ -40,9 +49,9 @@ public:
     void Render(SpriteRenderer& renderer) override;
     void Reset() override;
 
-    // ===== 多模式（B9）：对局模式经 SceneArgs 于切场时注入（OnPrepare），场景间不再直接设参 =====
-    // 枚举本体在 src/GameMode.h（怪物框架需按模式取参，不允许反向依赖场景头文件）；
-    // 局内重开（暂停/结算面板）不经 SceneManager，直接 Reset+OnEnter，模式自然保留
+    // ===== 多模式：对局模式经 SceneArgs 于切场时注入（OnPrepare），场景间不再直接设参 =====
+    // 模式定义归 ModeRegistry 所有；局内重开不经 SceneManager，直接 Reset+OnEnter，
+    // modeKey 自然保留
     void OnPrepare(const SceneArgs& args) override;
 
     // ===== IGameInputSink（玩法输入不再由本场景逐帧询问设备） =====
@@ -51,19 +60,18 @@ public:
     void OnGameInput(const GameInputFrame& frame) override { gameInput = frame; }
     GameInputFrame gameInput;   // 本帧快照（键位需先经 UISystem::WatchKeys 登记）
 
-    // 模式差异的唯一事实来源：所有随模式变化的数值集中在 StageParams.h，
-    // 调用端一律经 params() 取用，不再出现散落的 mode == 分支
+    // 模式差异的唯一事实来源：当前模式的 IGameMode 策略（ModeRegistry）。
+    // 调用端一律经 params() 取用，不再出现散落的 mode == 分支。
     using ModeParams = ::ModeParams;
-    const ModeParams& params() const { return ::ParamsOf(flow.Mode()); }
+    const ModeParams& params() const { return ParamsOf(flow.Mode()); }
 
 private:
     void LoadSpritesFromResourceManager();
 
-    std::vector<std::shared_ptr<Sprite>> backgroundSprites;
-    std::vector<std::shared_ptr<Sprite>> foregroundSprites;
-    std::vector<std::shared_ptr<Sprite>> terrainSprites;
-
     std::shared_ptr<Sprite> bat;
+
+    // 背景 / 前景 / 地面三段视差条带（第 4 期从本场景抽出，见 ParallaxField）
+    ParallaxField parallax;
 
     // 层成员用具体类型持有：直接调用具体 API，避免 static_pointer_cast 向下转型；
     // 基类 Layer 视图留给后续统一遍历的容器使用
@@ -80,10 +88,6 @@ private:
     std::shared_ptr<UIWidget> energyIcon = std::make_shared<UIWidget>();
     int hudGroupId = -1;
     InputScope energyScope; // 能量图标组（非模态）
-
-    void UpdateBackground(float dt);
-    void UpdateForeground(float dt);
-    void UpdateTerrain(float dt);
 
     // 局内 HUD 交互闸门：同步本场景 HUD 组开关并转发给 UI 图层
     // （入场倒数/转场/结算期间不得让局内按钮抢占鼠标）
@@ -117,11 +121,11 @@ private:
     // ===== 多模式（B9）：模式与流程状态在 RunFlow，参数表在 StageParams.h =====
     void UpdateTimeRush(float dt);
     void EndRunByTimeout();            // 时间耗尽直接结算（无死亡动画）
-    void AddScore(size_t base) override; // 统一计分入口（应用模式倍率并上报成就；IStageFeedback 实现）
+    void AddScore(size_t base) override; // 统一计分入口（应用模式倍率并上报成就；IRunEconomy 实现）
     void SettleRunResults();           // 局末结算（破纪录音效/写榜/金币结算/结算面板），死亡与超时共用
 
-    // ===== IStageFeedback（怪物表现服务，docs/怪物系统架构设计.md §4.3）=====
-    // 薄转发到场景既有能力；怪物经 ctx.fx 上行，场景不解释怪物事件。
+    // ===== 表现服务（三个角色接口，docs/怪物系统架构设计.md §4.3）=====
+    // 薄转发到场景既有能力；怪物经 ctx.fxFx / fxEconomy / fxPlayer 上行，场景不解释怪物事件。
     // 命名避让：接口方法不与场景嵌套类型（FloatText/WeatherMsg 结构体）同名——
     // 成员函数名会遮蔽同名嵌套类型名，故飘字接口取 FloatTextAt；
     // PostWeatherMsg/RemoveWeatherMsg/AddScore 由场景既有同签名方法充当实现（原声明处标注 override）
@@ -137,7 +141,7 @@ private:
     void RequestLightningStrike(float worldX) override;
     void AddCoins(int n) override;
     void AddTimeLimit(float sec) override;
-    void ReportAchievement(AchievementEvent event, long long value) override;
+    void ReportAchievement(std::string_view eventKey, long long value) override;
     void KillPlayer(const char* reason) override; // 统一致死入口：碰撞/落雷/怪物共用
     void BounceBat(float dx, float dy) override;
     void OnEnemyItemCollected(Vec2 pos) override;
@@ -160,8 +164,8 @@ private:
 
     bool showDebugPanel = false; // 调试面板默认收起，按 F1 切换（可选）
 
-    const float terrain_render_height = Config::GetInstance().GetTerrainRenderHeight();   // 地面贴图的实际大小
-    const float terrain_height = Config::GetInstance().GetTerrainHeight(); // 地面高度
+    const float terrain_render_height = Services::Get().Cfg().GetTerrainRenderHeight();   // 地面贴图的实际大小
+    const float terrain_height = Services::Get().Cfg().GetTerrainHeight(); // 地面高度
 
     // ===== 怪物（EnemyDirector 框架，docs/怪物系统架构设计.md）：场景与具体怪物解耦的唯一通道 =====
     // 枭王（D14 血月枭王）为首个注册怪物；场景只认导演与 IEnemy 契约

@@ -9,7 +9,9 @@
 // - 升级后进入待提示队列（文案含等级），场景轮询 PopPendingToast 弹 ToastLayer
 // 上报入口统一为 Notify(event, value)，由 MainScene 在各玩法节点调用。
 // =============================================================================
+#include <array>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <map>
 #include <set>
@@ -26,19 +28,9 @@ struct AchievementDef {
     long long tier[3];     // 三个等级阈值（依次递增）
 };
 
-enum class AchievementEvent {
-    PipePassed,
-    ItemCollected,
-    LightningDeath,
-    RunScore,
-    NearMissRun,
-    Combo,
-    SmashRun,
-    TimeRushScore,
-    StormScore,
-    BossKill,
-    BossFlawless,
-};
+// 事件标识改为字符串 key（第 2 期）：新增事件只需往 Rules() 加一条规则，
+// 不再需要扩枚举、加 case。保留别名以兼容既有接口声明。
+using AchievementEvent = std::string_view;
 
 struct AchievementToast {
     int id;
@@ -91,54 +83,44 @@ public:
         return n;
     }
 
-    // ===== 事件上报 =====
-    //  pipe_passed / item_collected / lightning_death：累计 +1（value 恒传 1）
-    //  run_score：本局当前总分（阈值类）
-    //  near_miss_run / smash_run：本局累计值
-    //  combo：当前连击数
-    //  time_rush_score / storm_score：对应模式下的本局总分
-    void Report(AchievementEvent event, long long value) {
-        switch (event) {
-        case AchievementEvent::PipePassed:
-            stats["pipes"] += value;
-            CheckCumulative(7, "pipes");
-            break;
-        case AchievementEvent::ItemCollected:
-            stats["items"] += value;
-            CheckCumulative(6, "items");
-            break;
-        case AchievementEvent::LightningDeath:
-            stats["lightning"] += value;
-            CheckCumulative(8, "lightning");
-            break;
-        case AchievementEvent::RunScore:
-            CheckValue(0, value);
-            CheckValue(1, value);
-            CheckValue(2, value);
-            break;
-        case AchievementEvent::NearMissRun:
-            CheckValue(3, value);
-            break;
-        case AchievementEvent::Combo:
-            CheckValue(4, value);
-            break;
-        case AchievementEvent::SmashRun:
-            CheckValue(5, value);
-            break;
-        case AchievementEvent::TimeRushScore:
-            CheckValue(9, value);
-            break;
-        case AchievementEvent::StormScore:
-            CheckValue(10, value);
-            break;
-        case AchievementEvent::BossKill:
-            stats["boss_kills"] += value;
-            CheckCumulative(11, "boss_kills");
-            break;
-        case AchievementEvent::BossFlawless:
-            stats["boss_flawless"] += value;
-            CheckCumulative(12, "boss_flawless");
-            break;
+    // ===== 事件 -> 成就规则表（第 2 期：数据驱动，取代 switch 分发）=====
+    // statKey != nullptr：累计型，先累加统计再按累计值结算；
+    // statKey == nullptr：阈值型，直接用上报值结算。
+    // 同一事件可对应多条规则（如 run_score 同时推进三个得分成就）。
+    struct AchievementRule {
+        const char* eventKey;
+        int         achievementId;
+        const char* statKey;
+    };
+
+    static const auto& Rules() {
+        static const std::array rules = {
+            AchievementRule{"pipe_passed",      7,  "pipes"},
+            AchievementRule{"item_collected",   6,  "items"},
+            AchievementRule{"lightning_death",  8,  "lightning"},
+            AchievementRule{"run_score",        0,  nullptr},
+            AchievementRule{"run_score",        1,  nullptr},
+            AchievementRule{"run_score",        2,  nullptr},
+            AchievementRule{"near_miss_run",    3,  nullptr},
+            AchievementRule{"combo",            4,  nullptr},
+            AchievementRule{"smash_run",        5,  nullptr},
+            AchievementRule{"time_rush_score",  9,  nullptr},
+            AchievementRule{"storm_score",     10,  nullptr},
+            AchievementRule{"boss_kill",       11, "boss_kills"},
+            AchievementRule{"boss_flawless",   12, "boss_flawless"},
+        };
+        return rules;
+    }
+
+    void Report(std::string_view eventKey, long long value) {
+        for (const AchievementRule& r : Rules()) {
+            if (eventKey != r.eventKey) continue;
+            if (r.statKey) {
+                stats[r.statKey] += value;
+                CheckCumulative(r.achievementId, r.statKey);
+            } else {
+                CheckValue(r.achievementId, value);
+            }
         }
     }
 

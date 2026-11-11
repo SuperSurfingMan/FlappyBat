@@ -1,4 +1,7 @@
+#include "app/Services.h"
 #include "res/ResourceManager.h"
+#include "res/ResourceCatalog.h"
+#include "gameplay/ItemCatalog.h"
 
 #include "sprite/Sprite.h"
 #include "sprite/BatSprite.h"
@@ -140,103 +143,20 @@ std::shared_ptr<Texture2D> ResourceManager::GetTexture2D(const std::string& key)
 }
 
 void ResourceManager::StartLoading() {
-    // ===== Boot 场景资源：主线程同步预载（第一帧就要用） =====
-    // v2_ui_logo 之后 BootScene 直接从 ResourceManager 取用；异步队列按 key 去重跳过，保证只解码一次
-    PreloadTexture("boot_background", "assets/Sprites/UI Elements/Boot_background.png");
-    PreloadTexture("v2_ui_logo", "assets/Sprites/UI Elements/v2/ui_logo.png");
-
-    // ===== 异步纹理清单（后台线程只做 IO + 解码，不碰 GL） =====
-    EnqueueTexture("background", "assets/Sprites/Game Objects/Background.png");
-    EnqueueTexture("foreground", "assets/Sprites/Game Objects/Foreground.png");
-    EnqueueTexture("terrain", "assets/Sprites/Game Objects/Terrain.png");
-    EnqueueTexture("obstaclesUp", "assets/Sprites/Game Objects/Obstacle_Up.png");
-    EnqueueTexture("obstaclesDown", "assets/Sprites/Game Objects/Obstacle_Down.png");
-    EnqueueTexture("bat", "assets/Sprites/Game Objects/Bat.png");
-    EnqueueTexture("batFlySheet", "assets/Animations/Spritesheets/Fly.png");
-    EnqueueTexture("batDeadSheet", "assets/Animations/Spritesheets/Death.png");
-    EnqueueTexture("rainSplash", "assets/Animations/Spritesheets/rainSplash.png");
-    EnqueueTexture("buttonRectangle", "assets/Sprites/UI Elements/Rectangle.png");
-    EnqueueTexture("buttonShadow", "assets/Sprites/UI Elements/button_shadow.png");
-    EnqueueTexture("candleLight", "assets/Animations/Spritesheets/candlelight.png");
-    EnqueueTexture("centerFrame", "assets/Sprites/UI Elements/center_frame.png");
-    EnqueueTexture("borderFrame", "assets/Sprites/UI Elements/frame.png");
-    EnqueueTexture("bigBat", "assets/Animations/Spritesheets/bigBat.png");
-    EnqueueTexture("bigBatShort", "assets/Animations/Spritesheets/bigBatShort.png");
-    // BOSS（D14 血月枭王）：本体拍翼/死亡序列帧、音爆网格动画、血月/羽刃/水晶（均为黑底，luma key 抠像）
-    EnqueueTexture("bossOwlFlapSheet", "assets/Animations/Spritesheets/BossOwlFlap.png");
-    EnqueueTexture("bossDeathSheet", "assets/Animations/Spritesheets/BossDeath.png");
-    EnqueueTexture("bossOwlFlapSheet10", "assets/Animations/Spritesheets/BossOwlFlap10.png");
-    EnqueueTexture("bossDeathSheet10", "assets/Animations/Spritesheets/BossOwlDeath.png");
-    EnqueueTexture("sonicWaveSheet", "assets/Animations/Spritesheets/SonicWave.png");
-    EnqueueTexture("bloodMoon", "assets/Sprites/Game Objects/blood_moon.png");
-    EnqueueTexture("featherBlade", "assets/Sprites/Game Objects/feather_blade.png");
-    EnqueueTexture("echoCrystal", "assets/Sprites/Game Objects/echo_crystal.png");
-    // BOSS 表演层素材（docs/BOSS美术素材生成方案 §四）：施法/力竭/狂暴/受击/瞳孔/技能姿势序列帧（黑底转透明 + repack 对齐）
-    EnqueueTexture("bossOwlCastSheet", "assets/Animations/Spritesheets/BossOwlCast.png");
-    EnqueueTexture("bossOwlFatigueSheet", "assets/Animations/Spritesheets/BossOwlFatigue.png");
-    EnqueueTexture("bossOwlRageSheet", "assets/Animations/Spritesheets/BossOwlRage.png");
-    EnqueueTexture("bossOwlHitSheet", "assets/Animations/Spritesheets/BossOwlHit.png");
-    EnqueueTexture("bossOwlScreechSheet", "assets/Animations/Spritesheets/BossOwlScreech.png");
-    EnqueueTexture("bossOwlStormCallSheet", "assets/Animations/Spritesheets/BossOwlStormCall.png");
-    EnqueueTexture("bossOwlDashSheet", "assets/Animations/Spritesheets/BossOwlDash.png");
-    EnqueueTexture("bossSwoopSheet", "assets/Animations/Spritesheets/BossOwlSwoop.png");
-    // 枭王矢量批次（assets/Animations/Vector/OwlKing/render，tools/render_owlking_vector_sheets.py
-    // 光栅化产物）：与 legacy 归一化表同规格（640 方格、eye_anchor=格正中），OwlKing 运行时按
-    // ArtBatch 开关在两批同构纹理间切换；键 = legacy 键 + "_vec" 后缀，网格参数完全复用
-    EnqueueTexture("bossOwlFlapSheet10_vec", "assets/Animations/Vector/OwlKing/render/BossOwlFlap10.png");
-    EnqueueTexture("bossDeathSheet10_vec",   "assets/Animations/Vector/OwlKing/render/BossOwlDeath.png");
-    EnqueueTexture("bossOwlCastSheet_vec",   "assets/Animations/Vector/OwlKing/render/BossOwlCast.png");
-    EnqueueTexture("bossOwlFatigueSheet_vec","assets/Animations/Vector/OwlKing/render/BossOwlFatigue.png");
-    EnqueueTexture("bossOwlRageSheet_vec",   "assets/Animations/Vector/OwlKing/render/BossOwlRage.png");
-    EnqueueTexture("bossOwlHitSheet_vec",    "assets/Animations/Vector/OwlKing/render/BossOwlHit.png");
-    EnqueueTexture("bossOwlScreechSheet_vec","assets/Animations/Vector/OwlKing/render/BossOwlScreech.png");
-    EnqueueTexture("bossOwlStormCallSheet_vec","assets/Animations/Vector/OwlKing/render/BossOwlStormCall.png");
-    EnqueueTexture("bossOwlDashSheet_vec",   "assets/Animations/Vector/OwlKing/render/BossOwlDash.png");
-    EnqueueTexture("bossSwoopSheet_vec",     "assets/Animations/Vector/OwlKing/render/BossOwlSwoop.png");
-    EnqueueTexture("mosquitoe", "assets/Animations/Spritesheets/mosquitoe.png");
-    EnqueueTexture("kiwi", "assets/Animations/Spritesheets/kiwiFruit.png");
-    EnqueueTexture("firefly", "assets/Animations/Spritesheets/firefly.png");
-    EnqueueTexture("mosquitoeDisappear", "assets/Animations/Spritesheets/mosquitoe_disappear.png");
-    EnqueueTexture("kiwiDisappear", "assets/Animations/Spritesheets/kiwi_disappear.png");
-    EnqueueTexture("fireflyDisappear", "assets/Animations/Spritesheets/firefly_disappear.png");
-    EnqueueTexture("pauseSpritesheet", "assets/Animations/Spritesheets/pause_spritesheet.png");
-    EnqueueTexture("pause", "assets/Sprites/UI Elements/pause.png");
-    EnqueueTexture("continue", "assets/Sprites/UI Elements/continue.png");
-    EnqueueTexture("return", "assets/Sprites/UI Elements/return.png");
-    EnqueueTexture("quit", "assets/Sprites/UI Elements/quit.png");
-    EnqueueTexture("pausing", "assets/Sprites/UI Elements/pause_img.png");
-    EnqueueTexture("pauseText", "assets/Sprites/UI Elements/pause_text.png");
-    EnqueueTexture("white", "assets/Sprites/UI Elements/white.png");
-    EnqueueTexture("restart", "assets/Sprites/UI Elements/restart.png");
-    EnqueueTexture("batBlink01", "assets/Animations/Spritesheets/GameOver/01.png");
-    EnqueueTexture("batBlink02", "assets/Animations/Spritesheets/GameOver/02.png");
-    EnqueueTexture("batBlink03", "assets/Animations/Spritesheets/GameOver/03.png");
-    EnqueueTexture("batBlink04", "assets/Animations/Spritesheets/GameOver/04.png");
-    EnqueueTexture("batBlink05", "assets/Animations/Spritesheets/GameOver/05.png");
-    EnqueueTexture("batBlink06", "assets/Animations/Spritesheets/GameOver/06.png");
-    EnqueueTexture("scoreRankBackground", "assets/Sprites/UI Elements/ScoreRankBackground.jpg");
-
-    // ===== V2 UI 资源（暗夜哥特风格） =====
-    // v2_ui_logo 已预载，EnqueueTexture 检测到同 key 会自动跳过（不重复解码）
-    EnqueueTexture("v2_ui_logo", "assets/Sprites/UI Elements/v2/ui_logo.png");
-    EnqueueTexture("v2_ui_panel", "assets/Sprites/UI Elements/v2/ui_panel.png");
-    EnqueueTexture("v2_ui_scoreboard_bg", "assets/Sprites/UI Elements/v2/ui_scoreboard_bg.png");
-    EnqueueTexture("v2_ui_achievements_bg", "assets/Sprites/UI Elements/v2/ui_achievements_bg.png");
-    EnqueueTexture("v2_ui_text_paused", "assets/Sprites/UI Elements/v2/ui_text_paused.png");
-    EnqueueTexture("v2_ui_text_gameover", "assets/Sprites/UI Elements/v2/ui_text_gameover.png");
-    EnqueueTexture("v2_ui_text_rank", "assets/Sprites/UI Elements/v2/ui_text_rank.png");
-    EnqueueTexture("v2_ui_text_achievements", "assets/Sprites/UI Elements/v2/ui_text_achievements.png");
-    EnqueueTexture("v2_ui_achievement_toast", "assets/Sprites/UI Elements/v2/ui_achievement_toast.png");
-    EnqueueTexture("v2_ui_score_badge", "assets/Sprites/UI Elements/v2/ui_score_badge.png");
-    EnqueueTexture("v2_ui_button", "assets/Sprites/UI Elements/v2/ui_button.png");
-    EnqueueTexture("v2_ui_button_secondary", "assets/Sprites/UI Elements/v2/ui_button_secondary.png");
-
-    const std::vector<std::string> v2IconNames = {
-        "pause", "play", "home", "quit", "restart", "rank"
-    };
-    for (const auto& iconName : v2IconNames) {
-        EnqueueTexture("v2_ui_icon_" + iconName,
-            "assets/Sprites/UI Elements/v2/ui_icon_" + iconName + ".png");
+    // ===== 资源清单统一由 res/ResourceCatalog.h 登记 =====
+    // 加载器只负责遍历：新增贴图 = 往表里加一行，本函数零改动。
+    // 预载先于异步入队、表内顺序、v2_ui_logo 的 key 去重，均与改造前一致。
+    const auto& catalog = GetResourceCatalog(); // 运行时清单（缺失时回退内置表）
+    for (const auto& e : catalog.preload) PreloadTexture(e.key, e.path);
+    for (const auto& e : catalog.async)   EnqueueTexture(e.key, e.path);
+    // 收集品贴图由道具定义表驱动：新增道具自动登记常态 / 消散两张贴图
+    for (const auto& def : kItemDefinitions) {
+        EnqueueTexture(def.key, def.texturePath);
+        EnqueueTexture(std::string(def.key) + "Disappear", def.disappearPath);
+    }
+    for (const auto& iconName : catalog.icons) {
+        EnqueueTexture(std::string("v2_ui_icon_") + iconName,
+                       std::string("assets/Sprites/UI Elements/v2/ui_icon_") + iconName + ".png");
     }
 
     // ===== 收尾任务：依赖所有纹理上传完成，主线程逐帧执行 =====
@@ -296,16 +216,16 @@ void ResourceManager::InitRainSystem() {
 void ResourceManager::InitSprites() {
     auto batTex = GetTexture2D("bat");
     auto batSprite = std::make_shared<BatSprite>(batTex);
-    batSprite->SetScale(Config::GetInstance().GetBatSize(), Config::GetInstance().GetBatSize());
+    batSprite->SetScale(Services::Get().Cfg().GetBatSize(), Services::Get().Cfg().GetBatSize());
     spriteResources["bat"] = batSprite;
 }
 
 void ResourceManager::InitSpriteLists() {
-    float terrainRenderHeight = Config::GetInstance().GetTerrainRenderHeight();
-    float terrainHeight = Config::GetInstance().GetTerrainHeight();
+    float terrainRenderHeight = Services::Get().Cfg().GetTerrainRenderHeight();
+    float terrainHeight = Services::Get().Cfg().GetTerrainHeight();
 
-    const float WIN_HEIGHT = Config::GetInstance().GetScreenHeight();
-    const float WIN_WIDTH = Config::GetInstance().GetScreenWidth();
+    const float WIN_HEIGHT = Services::Get().Cfg().GetScreenHeight();
+    const float WIN_WIDTH = Services::Get().Cfg().GetScreenWidth();
 
     
     // 初始化背景
@@ -356,29 +276,19 @@ void ResourceManager::InitSpriteLists() {
         obstaclesDownPool.push_back(obsDown);
     }
 
-    // 初始化可收集物品
-    Vec2 collectableItemScale = Config::GetInstance().GetProperty<Vec2>("collectableItemScale");
+    // 初始化可收集物品：按 ItemCatalog 定义表登记精灵池与动画网格。
+    // 新增道具不需要改这里（也不再有 type == "kiwi" 的帧数特例）。
+    Vec2 collectableItemScale = Services::Get().Cfg().GetProperty<Vec2>("collectableItemScale");
 
-    auto& kiwiPool = spriteListResources["kiwiPool"];
-    auto& mosquitoePool = spriteListResources["mosquitoePool"];
-    auto& fireflyPool = spriteListResources["fireflyPool"];
-
-    for (size_t i = 0;i < 3; ++i) {
-        auto kiwiSprite = std::make_shared<CollectableSprite>();
-        kiwiSprite->InitAnimations("kiwi", 2, 4);
-        kiwiSprite->SetScale(collectableItemScale.x, collectableItemScale.y);
-
-        auto mosquitoeSprite = std::make_shared<CollectableSprite>();
-        mosquitoeSprite->InitAnimations("mosquitoe", 1, 8);
-        mosquitoeSprite->SetScale(collectableItemScale.x, collectableItemScale.y);
-
-        auto fireflySprite = std::make_shared<CollectableSprite>();
-        fireflySprite->InitAnimations("firefly", 1, 8);
-        fireflySprite->SetScale(collectableItemScale.x, collectableItemScale.y);
-
-        kiwiPool.push_back(kiwiSprite);
-        mosquitoePool.push_back(mosquitoeSprite);
-        fireflyPool.push_back(fireflySprite);
+    for (const auto& def : kItemDefinitions) {
+        auto& pool = spriteListResources[def.poolKey];
+        for (size_t i = 0; i < 3; ++i) { // 每类池容量 = ItemField::ItemPoolCap
+            auto item = std::make_shared<CollectableSprite>();
+            item->InitAnimations(def.key, (size_t)def.rows, (size_t)def.cols,
+                                 def.disappearFrames);
+            item->SetScale(collectableItemScale.x, collectableItemScale.y);
+            pool.push_back(item);
+        }
     }
 
     // ===== 巨化星（B6-b 最稀有道具）：程序化生成五角星纹理 =====

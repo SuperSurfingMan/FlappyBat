@@ -22,7 +22,9 @@ public:
 
     void SwitchToAnimation(int animIndex) override;
     
-    void InitAnimations(std::string type, size_t normal_tex_row, size_t normal_tex_col);
+    // 动画网格与消散帧数均来自 ItemCatalog 定义表，本类不再按类型名分支
+    void InitAnimations(std::string type, size_t normal_tex_row, size_t normal_tex_col,
+                        int disappearFrames);
 
     void Update(float dt) override;
 private:

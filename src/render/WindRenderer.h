@@ -36,7 +36,7 @@ public:
     // 每帧喂入阵风状态(WeatherDirector 在统一 Update 之前调用):
     // active=阵风是否生效(预警期不算),force=推力向量(仅一轴非零:
     // 上(0,+)/下(0,-)/左(-,0)/右(+,0),幅值映射强度与流速)
-    void SetGust(bool active, const Vec2& force) { gustActive_ = active; gustForce_ = force; }
+    void SetGust(bool active, const Vec2& force) override { gustActive_ = active; gustForce_ = force; }
 
     // 统一 Update 入口:推进流向切换、起止淡入淡出与线群流动
     void Update(float dt) override;

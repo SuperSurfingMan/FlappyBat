@@ -103,9 +103,15 @@ add_executable(demo
     src/core/Input.cpp
     src/core/Config.cpp
 
-    # gameplay/ —— 玩法域共享概念：游戏模式、模式参数表、SAT 碰撞检测
+    # gameplay/ —— 玩法域：模式策略 / 注册表 / 参数表 / SAT 碰撞检测
     src/gameplay/GameMode.h
+    src/gameplay/ItemCatalog.h
+    src/gameplay/ModeDefinition.h
+    src/gameplay/ModeRegistry.h
+    src/gameplay/ModeRegistry.cpp
+    src/gameplay/ModeRoster.cpp
     src/gameplay/StageParams.h
+    src/gameplay/StageParams.cpp
     src/gameplay/Collision.cpp
 
     # render/ —— GL 渲染基础设施与渲染器（槽位管线见 src/render/WorldSlot.h）
@@ -123,6 +129,9 @@ add_executable(demo
     src/render/LightningRenderer.cpp
 
     # res/ —— 资源管理器 + 第三方库（stb/miniaudio）实现翻译单元
+    src/res/ManifestReader.h
+    src/res/ResourceCatalog.h
+    src/res/ResourceCatalog.cpp
     src/res/ResourceManager.cpp
     src/res/ImageLoader.cpp
     src/res/MiniaudioLoader.cpp
@@ -140,6 +149,7 @@ add_executable(demo
     src/ui/InputScope.h
 
     # scene/ —— 场景与转场
+    src/scene/SceneKey.h
     src/scene/SceneManager.cpp
     src/scene/BootScene.cpp
     src/scene/ReadyScene.cpp
@@ -154,9 +164,13 @@ add_executable(demo
     src/scene/stage/ObstacleField.cpp
     src/scene/stage/ItemField.cpp
     src/scene/stage/WeatherDirector.cpp
+    src/scene/stage/WeatherRendererRoster.h
+    src/scene/stage/WeatherRendererRoster.cpp
     src/scene/stage/RainSystem.cpp
     src/scene/stage/FeedbackFx.cpp
     src/scene/stage/StageHud.cpp
+    src/scene/stage/ParallaxField.cpp
+    src/scene/stage/RunSettlement.cpp
 
     # layer/ —— 屏幕覆盖层
     src/layer/LayerStack.h
@@ -170,11 +184,19 @@ add_executable(demo
     # enemy/ —— 怪物框架（docs/怪物系统架构设计.md）：导演 + 内置怪物登记 + 具体怪物实现
     src/enemy/EnemyDirector.cpp
     src/enemy/EnemyRoster.cpp
-    src/enemy/owlking/OwlKing.cpp
+    src/enemy/owlking/OwlKing.cpp        # 状态机与相位编排
+    src/enemy/owlking/OwlKingSkills.cpp  # 技能循环 / 弹幕 / 判定
+    src/enemy/owlking/OwlKingRender.cpp  # 表现层（动画状态机 / 世界层 / HUD）
 
     # app/ —— 组合根与玩家数据
     src/app/Application.cpp
+    src/app/Services.h
+    src/app/Services.cpp
     src/app/ScoreRank.cpp
+    src/app/DataIntegrity.h
+    src/app/DataIntegrity.cpp
+    src/audio/SFXCatalog.h
+    src/audio/SFXCatalog.cpp
 )
 
 target_include_directories(demo PRIVATE
@@ -218,3 +240,32 @@ add_custom_command(TARGET demo POST_BUILD
         ${GLFW_DIR}/lib/glfw3.dll
         $<TARGET_FILE_DIR:demo>
 )
+
+# ===============================
+# 数据表自测（纯 C++，无第三方框架）
+# 覆盖：模式数量一致性、参数表完整性、音效表完整性、score.dat 旧档兼容。
+# 运行：cmake --build build_msys --target demo_data_tests && ./build_msys/demo_data_tests
+# ===============================
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(demo_data_tests
+        tests/data_tables_test.cpp
+        src/gameplay/ModeRegistry.cpp
+        src/gameplay/ModeRoster.cpp
+        src/gameplay/StageParams.cpp
+        src/app/ScoreRank.cpp
+        src/scene/stage/RunFlow.cpp
+        src/scene/stage/RunSettlement.cpp
+        src/audio/SFXCatalog.cpp
+        src/res/ResourceCatalog.cpp
+    )
+    target_include_directories(demo_data_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    # 自测需要按绝对路径读取工程内的 manifest（ctest 的工作目录是构建目录）
+    target_compile_definitions(demo_data_tests PRIVATE
+        FLAPPYBAT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    # 与 demo 一致静态链接 MinGW 运行时，保证自测 exe 脱离 MSYS2 PATH 也能直接运行
+    if(MINGW)
+        target_link_options(demo_data_tests PRIVATE -static)
+    endif()
+    add_test(NAME data_tables COMMAND demo_data_tests)
+endif()

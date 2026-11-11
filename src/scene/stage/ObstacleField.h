@@ -8,7 +8,10 @@
 
 class Sprite;
 class SpriteRenderer;
-struct IStageFeedback;
+class Config;
+class ResourceManager;
+struct IFeedbackFx;
+struct IRunEconomy;
 
 // =============================================================================
 // 障碍场：管道对象池 / 变体（普通·摆动·窄间隙）/ 滚出回收 / 贴脸与计分 /
@@ -16,12 +19,13 @@ struct IStageFeedback;
 //
 // 边界：
 //   - 只读 StageFrame（难度、速度、怪物段落规则），不读场景字段；
-//   - 上行反馈经 IStageFeedback（计分/成就/音效/飘字/抖动）；
+//   - 上行反馈依赖两个窄接口（表现 IFeedbackFx / 结算 IRunEconomy），不再依赖胖接口；
 //   - 走廊道具生成通过回调交给 ItemField，障碍不认识道具池。
 // =============================================================================
 class ObstacleField {
 public:
-    void Load();
+    // 依赖在载入时注入：本类不再经全局服务访问点取配置/资源，可单独构造验证
+    void Load(Config& cfg, ResourceManager& res);
     void Reset(const StageFrame& f);
     void Update(float dt, const StageFrame& f);
     void UpdateFlying(float dt, const StageFrame& f);
@@ -33,7 +37,7 @@ public:
     // 巨化冲撞：撞飞与体型重叠的管道（返回本次撞飞根数）
     int SmashOverlapping(Vec2 center, float halfSize);
 
-    void SetFeedback(IStageFeedback* fx) { fx_ = fx; }
+    void SetFeedback(IFeedbackFx* fx, IRunEconomy* economy) { fxFx_ = fx; economy_ = economy; }
     void SetCorridorItemSpawner(std::function<void(float, float)> cb) {
         spawnCorridorItem_ = std::move(cb);
     }
@@ -42,6 +46,8 @@ public:
     int RunNearMissCount() const { return runNearMissCount; }
 
 private:
+    const Config& cfg() const { return *cfg_; }
+
     struct VariantState {
         int type = 0;               // 0 普通 / 1 摆动 / 2 窄间隙
         float gapSize = 100.0f;     // 该对障碍物的间隙大小
@@ -81,6 +87,7 @@ private:
     void SmashObstacles(size_t i, bool smashUp, bool smashDown);
 
     // ===== 状态 =====
+    const Config* cfg_ = nullptr; // Load 时注入（生命周期长于本对象）
     static constexpr int PoolSize = 5;
     static constexpr int OscillatingUnlockTier = 2;  // 摆动管道解锁档位
     static constexpr int NarrowUnlockTier = 4;       // 窄间隙管道解锁档位
@@ -123,6 +130,7 @@ private:
     int runSmashCount = 0;
     int runNearMissCount = 0;
 
-    IStageFeedback* fx_ = nullptr;
+    IFeedbackFx* fxFx_ = nullptr;
+    IRunEconomy* economy_ = nullptr;
     std::function<void(float, float)> spawnCorridorItem_;
 };
