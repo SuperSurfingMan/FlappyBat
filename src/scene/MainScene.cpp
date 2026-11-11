@@ -617,7 +617,7 @@ void MainScene::UpdateIntro(float dt) {
     }
     if (ev.finished) {
         // 正式开始：解锁操控并给予开局保护（经统一入口授予）
-        player.TryReleaseShield(100.f);
+        player.TryReleaseShield(3.f);
         svc_.Audio().PlaySFX(SFXToFile(SFX::Start), 0.9f);
         SpawnFloatText("开始！", bat->GetPosition() + Vec2(0.0f, 60.0f),
                        UITheme::Amber.r, UITheme::Amber.g, UITheme::Amber.b, 26.0f, 1.2f);
