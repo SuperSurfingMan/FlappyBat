@@ -8,6 +8,15 @@ project(ImGuiGameDemo LANGUAGES C CXX)
 # 导出 compile_commands.json，供 clangd 等工具做精确的语义分析
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# 头文件路径必须直接出现在编译命令行里，不能折叠进 @xxx.rsp 响应文件。
+# MinGW Makefiles 生成器默认把 -I 列表写进 CMakeFiles/<target>.dir/includes_CXX.rsp，
+# 命令行只剩 `@.../includes_CXX.rsp`；g++ 会展开它，但 clangd / cpptools 解析
+# compile_commands.json 时不会，于是编辑器里所有外部头（glad/glad.h、imgui.h、
+# GLFW/*）都会报「找不到 include 路径」，而实际编译完全正常。
+# 关掉该折叠后 -I 直接落到命令行，compile_commands.json 自带完整 include 信息。
+set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
+set(CMAKE_C_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
+
 # # ===============================
 # # Debug & Sanitizer (MinGW)
 # # ===============================
