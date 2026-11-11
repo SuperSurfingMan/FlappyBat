@@ -32,7 +32,7 @@
 ```
 src/
 ├── main.cpp            # 程序入口
-├── app/                # 组合根：Application / Services 服务上下文 / 排行榜 / 存档 / 启动校验
+├── app/                # 组合根：Application / Services 服务聚合（构造注入）/ 排行榜 / 存档 / 启动校验
 ├── audio/              # AudioSystem：miniaudio 封装（BGM / 音效）
 ├── core/               # 基础库：Vec2 数学、Config 全局配置、Input、Timer
 ├── enemy/              # 怪物框架：导演 + 内置怪物登记 + 枭王实现
@@ -48,7 +48,7 @@ src/
 └── ui/                 # 推送式 UI 事件派发内核（UISystem / UIWidget / FontManager 等）
 ```
 
-整体架构：`Application`（GLFW / GLAD / ImGui 初始化 + 帧循环）驱动 `SceneManager`，场景内组合精灵体系、覆盖层与各玩法子系统；渲染侧为「渲染器 + 槽位分发」管线（见 `src/render/WorldSlot.h`）。
+整体架构：`Application`（GLFW / GLAD / ImGui 初始化 + 帧循环）驱动 `SceneManager`；9 个服务由 `main()` 装配成 `Services` 后沿构造链下发（场景 → 图层 → 子系统），没有全局访问点。场景内组合精灵体系、覆盖层与各玩法子系统；渲染侧为「渲染器 + 槽位分发」管线（见 `src/render/WorldSlot.h`）。
 
 ### 扩展指南（数据驱动的扩展点）
 
@@ -57,7 +57,7 @@ src/
 | 游戏模式 | 在 `src/gameplay/ModeRoster.cpp` 的 `kBuiltinModes` 加一条 `ModeDefinition`；需要特殊行为时另实现 `IGameMode` 并注册。菜单按钮、排行榜页签、分段存档、模式专属成就、参数读取全部由 `ModeRegistry` 自动派生。**注册序必须追加在末尾**，否则旧 `score.dat` 的各段会被解释成别的模式。 |
 | 可收集道具 | 在 `src/gameplay/ItemCatalog.h` 加一条 `ItemDefinition` 并放入两张贴图。贴图登记、精灵池、动画网格、拾取效果与生成权重自动派生。 |
 | 怪物 | 见 `docs/怪物系统架构设计.md §9`（实现 `IEnemy` + `EnemyRoster.cpp` 一行注册）。 |
-| 场景 | 在 `Application::Init` 里 `Register(kSceneYourScene, 实例)` 一行。场景键是开放字符串（`src/scene/SceneKey.h`），不再有需要全体重编译的场景枚举；未注册的键会在 `RequestScene` 处指名报错。 |
+| 场景 | 在 `Application::InitScenes()` 里 `std::make_shared<YourScene>(*services)` 并 `Register` 一行。场景构造函数统一接收 `Services&`（依赖来自组合根，不查全局）；场景键是开放字符串（`src/scene/SceneKey.h`），未注册的键会在 `RequestScene` 处指名报错。 |
 | 转场 / 天气渲染器 | 实现 `ISceneTransition` / `IRenderer` 后，在 `main.cpp` 组合根或 `WeatherRendererRoster.cpp` 加一行注册。转场样式同样是开放字符串键（`kTransitionCircleFocus` 等）。 |
 | 成就事件 | 往 `Achievements::Rules()` 规则表加一行，无需扩枚举或加 `case`。 |
 
@@ -66,10 +66,11 @@ src/
 ### 运行时清单与服务装配
 
 - `assets/manifests/textures.txt` 与 `assets/manifests/sfx.txt` 是纹理 / 音效路径的运行时清单（TAB 分隔，支持 `#` 注释与 `[section]` 段）。文件缺失、段不完整或格式错误时自动回退到 `ResourceCatalog.h` / `SFXCatalog.cpp` 的内置常量表，单独拷出 exe 也不会因缺配置而崩溃。
-- `src/app/Services.h` 是统一服务上下文：组合根在 `main()` 里调用 `Services::Install()` 一次性装配 9 个服务实例，业务代码只经 `Services::Get()` 访问。构造顺序集中可见，也是后续改造成构造器注入的唯一改造点。
+- **服务装配（第 5 期）**：`src/app/Services.h` 已是一个普通聚合对象，由 `main()` 在栈上构造后注入 `Application`；场景与图层的构造函数统一接收 `Services&`，子系统只取自己需要的窄依赖（`Config&` / `ResourceManager&` / `PlayerProfile&` / `AudioSystem&`）。**代码中不再存在 `Services::Get()`** —— 依赖关系写在构造签名上，服务实例本身仍是进程级单例（生命周期与进程一致）。
+- **叶子类的隐式全局依赖也已清理**：`BatSprite(texture, res, cfg)`、`CollectableSprite::InitAnimations(..., res)`、`WindRenderer::Init(w, h)`、`UISystem::SetAudio(audio)`、`ResourceManager::Init(cfg)`、`IEnemy::Init(cfg, res)`、`SceneManager::SetViewportSize(w, h)`、`InputScope::Bind(ui, id, modal)`。新增类需要配置/资源时沿这条路径取依赖，不要引入新的全局访问点。
 - `src/enemy/IStageServices.h` 按接口隔离拆成 `IFeedbackFx` / `IRunEconomy` / `IPlayerCommands` 三个角色接口；新怪物或新子系统只需依赖自己用到的那个。组合胖接口 `IStageFeedback` 已移除，`MainScene` 直接实现三者。
-- 子系统依赖改为注入：`ObstacleField::Load(Config&, ResourceManager&)` 不再自查全局；`StageHud` 的画布尺寸随 `Snapshot` 下发，HUD 可脱离运行环境用任意尺寸构造验证。
 - 局末结算（破纪录判定 / 写榜 / 金币折算）抽到 `scene/stage/RunSettlement.cpp`，以值对象 `SettlementResult` 返回，场景只负责演出，因此可单测。
+- **按变更理由拆文件（第 5 期）**：`WeatherDirector` 拆出 `WeatherMsgBox`（消息盒状态机 + 绘制）与 `WeatherWarning`（落雷预警覆盖层 + 雷线几何）；`RainSystem` 拆为帧循环 / 闪电状态机 / 水花与地形三个翻译单元；`ReadyScene` 拆为生命周期、`ReadySceneMenu`（分裂式模式选择）、`ReadySceneUpgrade`（护盾升级）与 `ReadySceneLayout.h`（布局常量与几何公式）；`ScoreRankScene` 拆为数据与切页、`View`（页签与榜单列表）、`Dialog`（清空确认）。
 
 ## 第三方依赖
 
