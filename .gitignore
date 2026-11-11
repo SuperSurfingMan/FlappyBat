@@ -28,6 +28,7 @@ _*.png
 .arts/
 .codeartsdoer/
 .zcode/
+.workbuddy/
 AGENTS.md
 
 # ===== 其他本地目录（未纳入版本管理）=====
