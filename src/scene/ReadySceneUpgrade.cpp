@@ -127,8 +127,8 @@ void ReadyScene::DrawUpgradePanelUI() {
     // 悬停/点击事实全部直读控件（矩形在下方与卡片几何同步），本函数不再参与判定
 
     // ===== 两条升级轨道卡片 =====
-    // 展示数值与 PlayerProfile / MainScene 的升级参数保持一致：
-    // 持续时间 3.0s + 0.4s/级；充能速度 ×1.0 + 10%/级
+    // 展示数值与 PlayerProfile / PlayerAbilities 的升级参数保持一致：
+    // 无敌护盾持续时间 3.0s + 0.4s/级；能量充能速度 ×1.0 + 10%/级
     static const char* trackNames[PlayerProfile::TrackCount] = { "持续时间", "充能速度" };
     static const char* trackDescs[PlayerProfile::TrackCount] = {
         "护盾无敌时间 · 每级 +0.4 秒 · 满级 5.0 秒",

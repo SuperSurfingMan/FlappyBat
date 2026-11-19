@@ -1,4 +1,5 @@
 #include "scene/stage/ItemField.h"
+#include "app/TuningParams.h"
 #include "core/Config.h"
 #include "render/SpriteRenderer.h"
 #include "res/ResourceManager.h"
@@ -43,8 +44,9 @@ const ItemField::Effect& ItemField::EffectOf(int itemType) {
     return ItemAt((size_t)itemType).effect;
 }
 
-void ItemField::Load(ResourceManager& res, AudioSystem& audio) {
+void ItemField::Load(ResourceManager& res, AudioSystem& audio, const TuningParams& tuning) {
     audio_ = &audio;
+    tuning_ = &tuning;
     for (int type = 0; type < (int)TypeCount; ++type) {
         pools_[type] = res.GetSpriteList(ItemAt((size_t)type).poolKey);
     }
@@ -58,7 +60,7 @@ void ItemField::SetPickupHandler(std::function<void(int)> cb) {
             std::static_pointer_cast<CollectableSprite>(sp)->SetCallback([this, type]() {
                 if (onPickup_) onPickup_(type);
                 // 拾取音效随收益一起结算（顺序与原实现一致：先回调再出声）
-                if (audio_) audio_->PlaySFX(SFXToFile(SFX::Collect), 0.9f);
+                if (audio_) audio_->PlaySFX(SFXToFile(SFX::Collect), 1.0f);
             });
         }
     }
@@ -193,7 +195,9 @@ void ItemField::TrySpawnCorridor(float leftColumnX, float rightColumnX, const St
         return;
     }
 
-    if (Random::Get().GetRandomFloat() > ItemSpawnProbability) return;
+    // 生成概率基线 × 设置页"道具生产频率"倍率，上限钳满 100%（倍率 ≥2 时几乎必出）
+    const float spawnChance = std::min(1.0f, ItemSpawnProbability * tuning_->ItemFreqScale());
+    if (Random::Get().GetRandomFloat() > spawnChance) return;
 
     float minX = leftColumnX + ItemCorridorEdgeMargin;
     float maxX = rightColumnX - ItemCorridorEdgeMargin;

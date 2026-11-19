@@ -61,11 +61,12 @@ void AudioSystem::Shutdown()
 }
 
 
-bool AudioSystem::PlayBGM(const std::string& file, bool loop)
+bool AudioSystem::PlayBGM(const std::string& file, bool loop, float fileGain)
 {
     if (!m_initialized) return false;
 
     StopBGM();
+    m_bgmFileGain = fileGain;
 
     m_bgm = std::make_unique<ma_sound>();
 
@@ -82,7 +83,7 @@ bool AudioSystem::PlayBGM(const std::string& file, bool loop)
     }
 
     ma_sound_set_looping(m_bgm.get(), loop);
-    ma_sound_set_volume(m_bgm.get(), m_bgmVolume * m_masterVolume);
+    ma_sound_set_volume(m_bgm.get(), m_bgmVolume * m_masterVolume * m_bgmFileGain);
     ma_sound_start(m_bgm.get());
 
     return true;
@@ -209,7 +210,7 @@ void AudioSystem::SetBGMVolume(float v)
 {
     m_bgmVolume = v;
     if (m_bgm)
-        ma_sound_set_volume(m_bgm.get(), v * m_masterVolume);
+        ma_sound_set_volume(m_bgm.get(), v * m_masterVolume * m_bgmFileGain);
 }
 
 void AudioSystem::SetSFXVolume(float v)

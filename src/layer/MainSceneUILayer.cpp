@@ -81,7 +81,7 @@ void MainSceneUILayer::OnUpdate(float dt) {
     if (gameInput.Pressed(GLFW_KEY_ESCAPE) || gameInput.Pressed(GLFW_KEY_P)) {
         isPausing = !isPausing;
         svc_.Audio().PlaySFX(
-            SFXToFile(isPausing ? SFX::Pause : SFX::Resume), 0.9f);
+            SFXToFile(isPausing ? SFX::Pause : SFX::Resume), 1.0f);
     }
     // R：暂停面板中快捷重新开始（与点击"重新开始"按钮等价）
     if (isPausing && gameInput.Pressed(GLFW_KEY_R)) {

@@ -4,7 +4,9 @@
 #include "app/Achievements.h"
 #include "app/PlayerProfile.h"
 #include "app/ScoreRank.h"
+#include "app/TuningParams.h"
 #include "audio/AudioSystem.h"
+#include "autoplay/AutoPilotDirector.h"
 #include "core/Config.h"
 #include "res/ResourceManager.h"
 #include "scene/SceneManager.h"
@@ -18,6 +20,8 @@ Services::Services(Config& cfg,
                    ScoreRank& scores,
                    Achievements& ach,
                    PlayerProfile& profile,
+                   TuningParams& tuning,
+                   AutoPilotDirector& autoPilot,
                    UISystem& ui,
                    SceneManager& scenes,
                    Application& app)
@@ -27,21 +31,25 @@ Services::Services(Config& cfg,
       scores_(&scores),
       ach_(&ach),
       profile_(&profile),
+      tuning_(&tuning),
+      autoPilot_(&autoPilot),
       ui_(&ui),
       scenes_(&scenes),
       app_(&app) {
     // 跨服务接线也收敛在装配点：UI 的集中反馈音效需要音频实现，
     // 但 UISystem 不应自己去取（第 5 期把它的静态访问点一并移除）。
     ui_->SetAudio(*audio_);
-    std::cout << "[Services] assembled (9 services, injected by composition root)" << std::endl;
+    std::cout << "[Services] assembled (11 services, injected by composition root)" << std::endl;
 }
 
-Config&          Services::Cfg()     { return *cfg_; }
-AudioSystem&     Services::Audio()   { return *audio_; }
-ResourceManager& Services::Res()     { return *res_; }
-ScoreRank&       Services::Scores()  { return *scores_; }
-Achievements&    Services::Ach()     { return *ach_; }
-PlayerProfile&   Services::Profile() { return *profile_; }
-UISystem&        Services::UI()      { return *ui_; }
-SceneManager&    Services::Scenes()  { return *scenes_; }
-Application&     Services::App()     { return *app_; }
+Config&            Services::Cfg()      { return *cfg_; }
+AudioSystem&       Services::Audio()    { return *audio_; }
+ResourceManager&   Services::Res()      { return *res_; }
+ScoreRank&         Services::Scores()   { return *scores_; }
+Achievements&      Services::Ach()      { return *ach_; }
+PlayerProfile&     Services::Profile()  { return *profile_; }
+TuningParams&      Services::Tuning()   { return *tuning_; }
+AutoPilotDirector& Services::AutoPilot(){ return *autoPilot_; }
+UISystem&          Services::UI()       { return *ui_; }
+SceneManager&      Services::Scenes()   { return *scenes_; }
+Application&       Services::App()      { return *app_; }

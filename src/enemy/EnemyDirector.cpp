@@ -4,8 +4,8 @@ void EnemyDirector::Register(std::shared_ptr<IEnemy> enemy) {
     enemies_.push_back(std::move(enemy));
 }
 
-void EnemyDirector::InitAll(const Config& cfg, ResourceManager& res) {
-    for (auto& e : enemies_) e->Init(cfg, res);
+void EnemyDirector::InitAll(const Config& cfg, ResourceManager& res, const TuningParams& tuning) {
+    for (auto& e : enemies_) e->Init(cfg, res, tuning);
 }
 
 void EnemyDirector::OnRunStart() {
@@ -33,4 +33,11 @@ void EnemyDirector::RenderWorld(SpriteRenderer& renderer) {
 
 void EnemyDirector::RenderUI() {
     for (auto& e : enemies_) e->RenderUI();
+}
+
+void EnemyDirector::CaptureSense(EnemySense& out) const {
+    for (auto& e : enemies_) {
+        e->CaptureSense(out);
+        if (out.present) return; // 首个填充者生效（当前单怪不变量）
+    }
 }

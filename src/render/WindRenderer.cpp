@@ -73,6 +73,19 @@ void WindRenderer::ReseedLine(WindLine& line, bool anywhere) {
     }
 }
 
+void WindRenderer::ResetFx()
+{
+    gustActive_ = false;
+    gustForce_ = Vec2{0.0f, 0.0f};
+    intensity_ = 0.0f;
+    strength_ = 0.0f;
+    time_ = 0.0f;
+    flowDir_ = Vec2{0.0f, 1.0f};
+    instances_.clear();
+    // 线群整批重铺：下一阵风从均匀铺场开始，不复用上一局的位置/朝向
+    for (auto& line : lines_) ReseedLine(line, true);
+}
+
 void WindRenderer::Update(float dt)
 {
     const bool active = gustActive_;

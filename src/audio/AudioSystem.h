@@ -18,7 +18,8 @@ public:
     void Shutdown();
 
     // ========= BGM =========
-    bool PlayBGM(const std::string& file, bool loop = true);
+    // fileGain：单曲响度补偿（不写入用户音量设置、不重编码文件）
+    bool PlayBGM(const std::string& file, bool loop = true, float fileGain = 1.0f);
     void StopBGM();
     void PauseBGM();
     void ResumeBGM();
@@ -72,6 +73,7 @@ private:
 
     float m_masterVolume = 1.0f;
     float m_bgmVolume = 1.0f;
+    float m_bgmFileGain = 1.0f;
     float m_ambientVolume = 1.0f;
     float m_sfxVolume = 1.0f;
 };

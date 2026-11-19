@@ -24,6 +24,7 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "scene/stage/ShieldAuraFx.h"
 #include "layer/MainSceneUILayer.h"
 #include "layer/MainSceneOverLayer.h"
 #include "layer/ToastLayer.h"
@@ -31,6 +32,8 @@
 #include "app/ScoreRank.h"
 #include "app/Achievements.h"
 #include "app/PlayerProfile.h"
+#include "app/TuningParams.h"
+#include "autoplay/AutoPilotDirector.h"
 #include "ui/UIBuilder.h"
 #include "ui/UITheme.h"
 #include "ui/UISystem.h"
@@ -60,29 +63,32 @@ MainScene::MainScene(Services& services)
     });
 
     // 天气子系统：取 RainSystem、初始化雨/雷/风渲染器与天色遮罩
-    weather.Init(svc_.Cfg(), svc_.Res(), svc_.Audio());
+    // （调参注入后，落雷间隔随"雷击频率倍率"缩放）
+    weather.Init(svc_.Cfg(), svc_.Res(), svc_.Audio(), svc_.Tuning());
 
     // 玩家能力子系统：共享蝙蝠精灵，上行反馈只依赖表现接口（IFeedbackFx）
+    // （调参注入后，巨化无敌时长随设置页参数变化）
     player.Init(std::static_pointer_cast<BatSprite>(bat), this,
-                svc_.Cfg(), svc_.Profile());
+                svc_.Cfg(), svc_.Profile(), svc_.Tuning());
 
     // 怪物（EnemyDirector 框架）：登记内置怪物并初始化（纹理已在资源加载阶段就绪）
     RegisterBuiltinEnemies(enemies);
-    enemies.InitAll(svc_.Cfg(), svc_.Res());
+    enemies.InitAll(svc_.Cfg(), svc_.Res(), svc_.Tuning());
 
     mainSceneUILayer = std::make_shared<MainSceneUILayer>(svc_);
     mainSceneOverLayer = std::make_shared<MainSceneOverLayer>(svc_);
 
-    // ===== 局内 HUD 交互控件：能量图标热区 =====
+    // ===== 局内 HUD 交互控件：无敌护盾图标（闪电）热区 =====
     // 命中矩形与绘制几何同源（GetEnergyIconRect）；可点与否由 SetEnabled 逐帧同步，
     // 鼠标判定不再出现在本场景代码里
     hudGroupId = svc_.UI().CreateGroup(kLayerMainHud);
     energyIcon->SetPlayFeedbackSFX(false); // 原实现无音效，保持听感不变
-    energyIcon->SetOnClick([this]() { player.TryReleaseShield(); });
+    energyIcon->SetOnClick([this]() { player.TryReleaseInvincible(); });
     svc_.UI().Add(hudGroupId, energyIcon);
     energyScope.Bind(svc_.UI(), hudGroupId, false);
 
     // 玩法操控的按键集：声明给 UISystem，本场景只读它推送的回帧快照
+    // 空格仅释放无敌护盾（不再振翅）；S/↓ 为一次性短护盾；振翅用鼠标左键 / W / ↑
     svc_.UI().WatchKeys({GLFW_KEY_SPACE, GLFW_KEY_W, GLFW_KEY_UP,
                                GLFW_KEY_S, GLFW_KEY_DOWN,
                                GLFW_KEY_A, GLFW_KEY_D, GLFW_KEY_LEFT, GLFW_KEY_RIGHT,
@@ -140,7 +146,7 @@ void MainScene::OnEnter()
     // 局内重开（Reset + OnEnter，不经 SceneManager）重复调用也安全。
     AudioSystem& audio = svc_.Audio();
     audio.PauseBGM();
-    audio.PlayAmbient("assets/Audio/Sound Effects/Rain.wav", true, 0.4f);
+    audio.PlayAmbient("assets/Audio/Sound Effects/Rain.wav", true, 1.0f); // 雨声已归一到 -20 LUFS-K，与全部 SFX 同档
     weather.OnEnter(params().lightningWarnLead); // 落雷预警提前量（随模式差异化）
     weather.ApplyForTier(GetCurrentDifficultyTier(), params()); // 天气基线（A4-c；场景切换前已 Reset，此处为第 0 档）
 
@@ -157,7 +163,7 @@ void MainScene::OnEnter()
     const bool maskActive = svc_.Scenes().IsTransitionActive();
     flow.OnEnter(maskActive);
     if (!maskActive) {
-        svc_.Audio().PlaySFX(SFXToFile(SFX::Countdown), 0.5f);
+        svc_.Audio().PlaySFX(SFXToFile(SFX::Countdown), 1.0f);
     }
 }
 
@@ -217,7 +223,12 @@ void MainScene::Update(float dt)
     // 天气事件消息盒：闪烁计时 + 雷击事件轮询（阵风/风暴档位在各自更新点驱动）
     weather.TickFeed(dt);
 
-    if (flow.IsGameOver()) return;
+    if (flow.IsGameOver()) {
+        // 结算期间玩法冻结，但风线仍要推进：否则上一局的气流静止停在画面上，
+        // 并一路带到「重新开始」之后（UpdateFx 只在正常玩法帧被调用时就会这样）。
+        weather.UpdateFx(dt, true);
+        return;
+    }
 
     // ===== 入场流程：转场遮罩 / 倒数期间，世界与操控冻结 =====
     // 障碍不进入屏幕、蝙蝠原地待机振翅（与准备界面同一姿态），天气照常以保持氛围
@@ -225,6 +236,7 @@ void MainScene::Update(float dt)
         UpdateIntro(dt);
         weather.SetRainScrollSpeed(0.0f); // 世界静止，水花与冻结地面同步
         weather.AdvanceRain(dt);
+        weather.UpdateFx(dt, true); // 局内重开的倒数期：无阵风，残留风线走完淡出
         bat->Update(dt);
         return;
     }
@@ -234,13 +246,15 @@ void MainScene::Update(float dt)
         weather.SetRainScrollSpeed(0.0f);
         if (!flow.CollisionEnabled()) {
             weather.AdvanceRain(dt);
+            weather.UpdateFx(dt, true); // 死亡动画期：气流淡出（暂停仍保持冻结）
             bat->Update(dt);
         }
         return;
     }
 
     // 本帧只读快照：各子系统共享同一份状态，不反向读场景字段
-    const StageFrame frame = BuildFrame(dt);
+    // （非 const：Auto Play 决策后把动作意图挂到快照上，随帧下传）
+    StageFrame frame = BuildFrame(dt);
 
     // 三段视差条带统一推进：地面滚动速度 == 障碍物速度（随难度递进）
     parallax.Scroll(dt,
@@ -255,16 +269,31 @@ void MainScene::Update(float dt)
         const PlayerAbilities::GiantBody giant = player.Giant();
         if (giant.active) obstacles.SmashOverlapping(giant.center, giant.halfSize);
     }
-    // 输入意图（由 UISystem 推送的本帧快照）：俯冲（S/↓）由玩家子系统读取
-    weather.UpdateGust(dt, frame, params()); // 阵风（A4-b）：只算推力，由玩家子系统在积分前施加
+    // ===== Auto Play（自动演示）：武装时向导演要一次决策，动作意图挂到本帧快照 =====
+    // 决策点在障碍推进之后、蝙蝠运动之前：感知即本帧世界状态，动作当帧被消费。
+    // 未武装（开关关 / 模式未注册策略）时意图归零，人类输入直通，行为不变。
+    autoPilotActions_ = AutoPilotActions{};
+    autoPilotActive_ = false;
+    if (svc_.AutoPilot().IsArmed(flow.Mode())) {
+        AutoPilotSenses senses;
+        FillAutoPilotSenses(frame, senses);
+        svc_.AutoPilot().Decide(flow.Mode(), senses, dt, autoPilotActions_);
+        // 两个独立技能：无敌护盾（能量闸门）与一次性短护盾（CD 闸门）各走各的入口
+        if (autoPilotActions_.releaseInvincible) player.TryReleaseInvincible();
+        if (autoPilotActions_.releaseShortShield) player.TryReleaseShortShield();
+        autoPilotActive_ = true;
+    }
+    frame.autoPilot = autoPilotActive_ ? &autoPilotActions_ : nullptr;
+
+    weather.UpdateGust(dt, frame, params()); // 阵风（A4-b）：只算推力（生效期非零）
     weather.UpdateFx(dt); // 风线可视化（仅生效期显示；预警期无气流）
-    player.Update(dt, frame, weather.GustForce()); // 蝙蝠运动 + 俯冲 + 护盾/能量计时
+    player.Update(dt, frame, weather.GustForce()); // 蝙蝠运动 + 无敌护盾/短护盾计时（两套独立）
     UpdateTimeRush(dt);   // 限时冲刺倒计时（B9）
     // 地面滚动/水花漂移速度与障碍物同步（难度递进后不再恒为 200）
     weather.SetRainScrollSpeed(GetCurrentObstacleSpeed());
     weather.AdvanceRain(dt);
 
-    // ===== 能量护盾计时在 PlayerAbilities::Update 内推进 =====
+    // ===== 无敌护盾与一次性短护盾的计时均在 PlayerAbilities::Update 内推进 =====
 
     // ===== 连击窗口倒计时（A3） =====
     flow.TickCombo(dt);
@@ -296,6 +325,7 @@ void MainScene::Update(float dt)
         // 等效碰撞半径=蝙蝠当前横向尺寸一半（巨化期 bat scale 已放大，无需再乘系数）
         ectx.batRadius = bat->GetScale().x * 0.5f;
         ectx.batInvincible = player.IsInvincible();
+        ectx.batOtherInvincible = player.HasOtherInvincibility();
         ectx.batGiant = player.IsGiant();
         ectx.score = flow.Score();
         ectx.timeLeft = flow.Timed() ? flow.TimeLeft() : -1.f; // <0 = 非限时
@@ -304,12 +334,14 @@ void MainScene::Update(float dt)
         ectx.screenW = (float)svc_.Cfg().GetScreenWidth();
         ectx.screenH = (float)svc_.Cfg().GetScreenHeight();
         // 输入意图（取自 UISystem 推送的本帧已裁决快照：悬停在控件上的右键不会下发）
+        // Auto Play 武装时音爆意图由策略合成（未武装 autoPilotActions_ 恒为零值）
         ectx.firePrimary = gameInput.PointerPressed(GLFW_MOUSE_BUTTON_RIGHT) ||
-                           gameInput.Pressed(GLFW_KEY_F);
-        ectx.diveRequested = gameInput.Pressed(GLFW_KEY_S) ||
-                             gameInput.Pressed(GLFW_KEY_DOWN);
-        ectx.batDiving = player.Diving();      // 俯冲急坠中（怪物本体接触判定：俯冲撞击）
-        ectx.batParry = player.DiveParryWindow(); // 俯冲无敌帧窗口（弹反判定，§4.1 三期）
+                           gameInput.Pressed(GLFW_KEY_F) ||
+                           autoPilotActions_.firePrimary;
+        // 短护盾 / 弹反：怪物侧据此把子弹碰撞挂起 kParryGrace 秒等待释放事件
+        // （无敌护盾走 batInvincible，两者互不替代）
+        ectx.batShieldActive = player.ShortShieldActive();
+        ectx.parryArmed = player.ParryReleaseWindow();
         ectx.fxFx      = this; // 三个角色接口各管一段职责，怪物只取自己需要的
         ectx.fxEconomy = this;
         ectx.fxPlayer  = this;
@@ -319,17 +351,25 @@ void MainScene::Update(float dt)
     items.CheckPickup(bat->GetPosition(), bat->GetScale());
 
     if (flow.CollisionEnabled()) {
-        std::shared_ptr<BatSprite> batSprite = std::dynamic_pointer_cast<BatSprite>(bat);
-        if (!batSprite || batSprite->GetInvincibleState()) return;
-        bool hitByObstacle = obstacles.CheckCollision(bat->GetPosition(), bat->GetScale());
-        bool hitByLightning = weather.CheckStrikeHit(bat->GetPosition()); // A4-a：落雷危险窗口内的雷击判定
+        const bool hitByObstacle = obstacles.CheckCollision(bat->GetPosition(), bat->GetScale());
+        const bool hitByLightning = weather.CheckStrikeHit(bat->GetPosition()); // A4-a：落雷危险窗口内的雷击判定
         if (hitByObstacle || hitByLightning) {
-            if (hitByLightning) {
-                SpawnFloatText("遭雷击！", bat->GetPosition() + Vec2(0.0f, 46.0f),
-                               0.87f, 0.35f, 0.35f, 24.0f);
-                ReportAchievement("lightning_death", 1);
+            // 伤害闸门顺序：
+            //   1) 原有无敌（无敌护盾/巨化/开局保护/受击无敌）直接吸收，短护盾原样保留；
+            //   2) 否则一次性短护盾挡下并立即消失（一次受击后消失）；
+            //   3) 两者都没有才致死。
+            if (player.HasOtherInvincibility()) {
+                // 与旧版一致：无敌期间撞管道/雷击不产生任何损失
+            } else if (player.ConsumeShortShield()) {
+                // 已挡下：不致死
+            } else {
+                if (hitByLightning) {
+                    SpawnFloatText("遭雷击！", bat->GetPosition() + Vec2(0.0f, 46.0f),
+                                   0.87f, 0.35f, 0.35f, 24.0f);
+                    ReportAchievement("lightning_death", 1);
+                }
+                KillPlayer(hitByLightning ? "lightning" : "collision"); // 统一致死入口
             }
-            KillPlayer(hitByLightning ? "lightning" : "collision"); // 统一致死入口（含怪物复位/音效/死亡动画/结算）
         }
     }
 }
@@ -425,7 +465,7 @@ void MainScene::Reset()
 
     // reset variables（分数/门控已在 flow.Reset 中归零）
     isObstacleVisible = true;
-    player.Reset(); // 能量/护盾/俯冲/巨化/慢动作归零
+    player.Reset(); // 无敌护盾能量/短护盾 CD/弹反窗口/巨化/慢动作归零
     weather.ApplyForTier(GetCurrentDifficultyTier(), params()); // 天气回到当前档位基线（A4-c）
 
     mainSceneUILayer->Reset();
@@ -444,7 +484,7 @@ void MainScene::LoadSpritesFromResourceManager() {
     bat = svc_.Res().GetSprite("bat");
 
     obstacles.Load(svc_.Cfg(), svc_.Res());
-    items.Load(svc_.Res(), svc_.Audio());
+    items.Load(svc_.Res(), svc_.Audio(), svc_.Tuning());
 }
 
 void MainScene::DrawImGUILayout() {
@@ -454,7 +494,19 @@ void MainScene::DrawImGUILayout() {
     // 遮罩本体由 SceneManager 于场景绘制后统一叠加，此处只控制 HUD 不出现
     if (flow.MaskPhase()) return;
 
-    // 常驻 HUD 第一段：SCORE / 能量 / 金币 / 俯冲（位于天气消息盒之下）
+    // 一次性短护盾的圆形半透明动态遮罩：先画，避免盖住 HUD 读数；
+    // 受击消耗后 ShortShieldTimer 归零，本帧起立即不再绘制。
+    // （无敌护盾不画此遮罩——它只有蝙蝠自身的辉光闪烁，保持原表现）
+    if (player.ShortShieldActive() && flow.CollisionEnabled()) {
+        // 传蝙蝠碰撞圆半径（与 EnemyContext::batRadius 同源），遮罩实际半径由
+        // ShieldAuraFx 统一加 10px —— 刚好比蝙蝠大一圈。
+        const float batCollisionRadius = bat->GetScale().x * 0.5f;
+        DrawShieldAura((float)svc_.Cfg().GetScreenHeight(),
+                       bat->GetPosition(), batCollisionRadius,
+                       player.ShortShieldTimer(), player.ShortShieldDuration());
+    }
+
+    // 常驻 HUD 第一段：SCORE / 无敌护盾 / 金币 / 短护盾（位于天气消息盒之下）
     StageHud::Snapshot snap = BuildHudSnapshot();
     hud.DrawPrimary(snap, *energyIcon);
 
@@ -484,7 +536,7 @@ void MainScene::DrawImGUILayout() {
             std::cout << "Switched to ready scene..." << std::endl;
         }
         if (ImGui::Button("Reset Game")) {
-            player.TryReleaseShield(3.0f); // 调试重开：经统一入口授予开局保护
+            player.GrantInvincible(3.0f); // 调试重开：经免费无敌入口授予开局保护
             Reset();
         }
         ImGui::End();
@@ -498,13 +550,16 @@ StageHud::Snapshot MainScene::BuildHudSnapshot() const {
     s.screenH = (float)svc_.Cfg().GetScreenHeight();
     s.score = (int)flow.Score();
     s.coins = svc_.Profile().GetCoins();
-    s.energy = player.Energy();
-    s.shieldTimer = player.ShieldTimer();
-    s.shieldDuration = player.ShieldDuration();
+    // 无敌护盾（invincible）：能量槽 + 生效剩余
+    s.energy = player.InvincibleEnergy();
+    s.invincibleTimer = player.InvincibleTimer();
+    s.invincibleDuration = player.InvincibleDuration();
+    // 一次性短护盾（shield）：独立 CD 槽，不与上面的能量槽共用
+    s.shortShieldTimer = player.ShortShieldTimer();
+    s.shortShieldDuration = player.ShortShieldDuration();
+    s.shortShieldCooldown = player.ShortShieldCooldown();
+    s.shortShieldCooldownTotal = player.ShortShieldCooldownTotal();
     s.pulseClock = player.PulseClock();
-    s.diveCooldown = player.DiveCooldown();
-    s.diveCooldownTotal = player.DiveCooldownTotal();
-    s.diving = player.Diving();
     s.timeLeft = flow.TimeLeft();
     s.timed = params().timed;
     s.comboCount = flow.ComboCount();
@@ -551,6 +606,53 @@ StageFrame MainScene::BuildFrame(float dt) const {
     return f;
 }
 
+// ===== Auto Play 感知填充：把各子系统只读快照聚合成 AI 的世界模型 =====
+// 本场景是唯一同时认识所有子系统的装配点，由它统一供数；
+// 策略侧只消费纯数据快照（autoplay/AutoPilotSenses.h），不反向依赖任何子系统。
+void MainScene::FillAutoPilotSenses(const StageFrame& f, AutoPilotSenses& s) const {
+    // 世界几何与节奏（摆动预测的 clamp 公式与 ObstacleField 同源）
+    s.screenW = f.screenW;
+    s.screenH = f.screenH;
+    s.terrainY = f.terrainY;
+    s.worldSpeed = f.obstacleSpeed;
+    s.safeMargin = svc_.Cfg().GetSafeMargin();
+    s.hMoveSpeed = BatSprite::HorizontalMoveSpeed;
+    s.xMin = 40.0f; // 与 BatSprite::LoadParamsFromConfig 同式（半身位余量）
+    s.xMax = f.screenW - 40.0f;
+    s.edgeMargin = BatSprite::EdgeContactMargin;
+
+    // 蝙蝠本体（物理参数取精灵装载值，保证预测轨迹与实际积分同源）
+    if (const auto batSprite = std::dynamic_pointer_cast<BatSprite>(bat)) {
+        s.gravity = batSprite->GetGravity();
+        s.jumpStrength = batSprite->GetJumpStrength();
+        s.bat.vy = batSprite->GetVelocity();
+        s.bat.hSpeed = batSprite->GetHorizontalSpeed();
+    }
+    s.bat.pos = f.batPos;
+    s.bat.scale = f.batScale;
+    s.bat.invincibleEnergy = player.InvincibleEnergy();
+    s.bat.shortShieldReady = player.ShortShieldReady();
+    s.bat.shortShieldActive = player.ShortShieldActive();
+    s.bat.invincible = player.IsInvincible();
+    s.bat.giant = player.IsGiant();
+
+    // 阵风（含生效剩余秒，规划器把外力纳入仿真视界）与落雷全生命周期
+    s.gust.force = weather.GustForce();
+    s.gust.active = weather.IsGustActive();
+    s.gust.warning = weather.IsGustWarning();
+    s.gust.remaining = weather.GustRemaining();
+    weather.CaptureLightningSense(s.lightning);
+
+    // 管道列威胁几何（x 升序）+ 摆动变体全局时钟
+    obstacles.CapturePipeSense(s.pipes);
+    s.oscClock = obstacles.OscillClock();
+
+    // 怪物威胁（导演聚合转发；无实现快照的怪物 = present=false，对 AI 不可见）
+    enemies.CaptureSense(s.boss);
+
+    s.mode = flow.Mode();
+}
+
 // ===== 难度递进（A1） =====
 
 int MainScene::GetCurrentDifficultyTier() const {
@@ -589,7 +691,7 @@ void MainScene::OnItemPicked(int itemType) {
     // 保证模式倍率、连击窗口与成就上报不被道具侧绕过
     const ItemField::Effect& e = ItemField::EffectOf(itemType);
     if (e.score > 0) AddScore((size_t)e.score);
-    if (e.energy > 0.0f) player.AddEnergy(e.energy);
+    if (e.energy > 0.0f) player.AddInvincibleEnergy(e.energy); // 道具能量只给无敌护盾充能
     svc_.Profile().AddCoins(e.coins);
     ReportAchievement("item_collected", 1);
     SpawnComboBonusText(ApplyPickupComboBonus());
@@ -610,17 +712,25 @@ void MainScene::UpdateIntro(float dt) {
     // 揭示完毕由 RunFlow 转入 3-2-1
     const RunFlow::IntroTick ev = flow.TickIntro(dt, svc_.Scenes().IsTransitionActive());
     if (ev.becameCounting) {
-        svc_.Audio().PlaySFX(SFXToFile(SFX::Countdown), 0.5f);
+        svc_.Audio().PlaySFX(SFXToFile(SFX::Countdown), 1.0f);
     }
     if (ev.countdownAdvanced) {
-        svc_.Audio().PlaySFX(SFXToFile(SFX::Countdown), 0.5f); // 新数字出现时滴答
+        svc_.Audio().PlaySFX(SFXToFile(SFX::Countdown), 1.0f); // 新数字出现时滴答
     }
     if (ev.finished) {
-        // 正式开始：解锁操控并给予开局保护（经统一入口授予）
-        player.TryReleaseShield(3.f);
-        svc_.Audio().PlaySFX(SFXToFile(SFX::Start), 0.9f);
+        // 正式开始：解锁操控并给予开局保护（免费无敌，不占能量/不占无敌护盾 HUD）
+        // 保护时长取自设置页「参数调节」；0 秒 = 不授予
+        if (const float protect = svc_.Tuning().InitialInvulnSec(); protect > 0.0f) {
+            player.GrantInvincible(protect);
+        }
+        svc_.Audio().PlaySFX(SFXToFile(SFX::Start), 1.0f);
         SpawnFloatText("开始！", bat->GetPosition() + Vec2(0.0f, 60.0f),
                        UITheme::Amber.r, UITheme::Amber.g, UITheme::Amber.b, 26.0f, 1.2f);
+        // 自动演示提示（武装 = 开关开启且当前模式注册了策略）
+        if (svc_.AutoPilot().IsArmed(flow.Mode())) {
+            SpawnFloatText("自动演示中", bat->GetPosition() + Vec2(0.0f, 104.0f),
+                           0.60f, 0.85f, 0.95f, 24.0f, 2.4f);
+        }
         std::cout << "Intro finished. Game starts." << std::endl;
     }
 }
@@ -682,6 +792,7 @@ void MainScene::SettleRunResults() {
 
 void MainScene::EndRunByTimeout() {
     if (flow.IsGameOver()) return;
+    weather.StopGust(); // 局已结束：撤掉进行中的阵风推力与消息行
     std::cout << "Time's up! Final score: " << flow.Score() << std::endl;
     svc_.Audio().PlaySFX(SFXToFile(SFX::GameOver), 1.0f);
     const float WIN_WIDTH = (float)svc_.Cfg().GetScreenWidth();
@@ -731,6 +842,7 @@ void MainScene::ReportAchievement(std::string_view eventKey, long long value) {
 void MainScene::KillPlayer(const char* reason) {
     if (!flow.CollisionEnabled()) return; // 已在死亡流程中
     flow.SetCollisionEnabled(false);      // 禁止后续碰撞/受击再触发
+    weather.StopGust();            // 死亡瞬间终止阵风（推力清零，风线随后淡出）
     player.SetLocked(true);        // 死亡后禁止护盾等主动技能
     enemies.OnBatDead();           // 怪物全员复位（段落中止，再降临计时从头开始）
     std::cout << "Killed by " << reason << ". Switching to death animation." << std::endl;
@@ -747,6 +859,10 @@ void MainScene::KillPlayer(const char* reason) {
     });
 }
 
+bool MainScene::ConsumeShortShield() {
+    return player.ConsumeShortShield();
+}
+
 void MainScene::BounceBat(float dx, float dy) {
     player.Bounce(dx, dy);
 }
@@ -761,7 +877,7 @@ void MainScene::OnEnemyItemCollected(Vec2 /*pos*/) {
 }
 
 // 蝙蝠受击无敌授予（怪物侧受击模型 §6）：闪烁反馈由 BatSprite 无敌期辉光脉动承担。
-// Timer::Start 会无条件重置计时，故仅在能延长时授予——防止把更长的护盾/巨化/俯冲无敌缩短（§6 护盾照常消耗）。
+// Timer::Start 会无条件重置计时，故仅在能延长时授予——防止把更长的护盾/巨化无敌缩短（§6 护盾照常消耗）。
 void MainScene::GrantBatInvuln(float dur) {
     player.GrantInvuln(dur);
 }

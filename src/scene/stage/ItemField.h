@@ -11,6 +11,7 @@ class Sprite;
 class SpriteRenderer;
 class ResourceManager;
 class AudioSystem;
+class TuningParams;
 
 // =============================================================================
 // 道具场：蚊子 / 萤火虫 / 猕猴桃三类对象池 + 走廊生成策略 + 拾取判定 +
@@ -28,8 +29,9 @@ public:
     using Effect = ItemEffect; // 兼容既有 ItemField::Effect 引用
     static const Effect& EffectOf(int itemType);
 
-    // 资源与音频由场景注入：道具池只认这两者，不查全局表
-    void Load(ResourceManager& res, AudioSystem& audio);
+    // 资源、音频与调参由场景注入：道具池只认这三者，不查全局表
+    // （调参提供"道具生产频率"倍率，生成概率本身仍是本类的常量基线）
+    void Load(ResourceManager& res, AudioSystem& audio, const TuningParams& tuning);
     void Reset();
     void Update(float dt, const StageFrame& f);
     void Render(SpriteRenderer& renderer);
@@ -47,7 +49,7 @@ private:
     bool GenerateAt(int type, Vec2 position);
 
     // ===== 生成参数 =====
-    static constexpr float ItemSpawnProbability = 0.55f;     // 每条走廊的生成概率
+    static constexpr float ItemSpawnProbability = 0.55f;     // 每条走廊的生成概率（基线，乘调参倍率后钳到 1）
     static constexpr float ItemCorridorEdgeMargin = 90.0f;   // 距障碍物列中心的最小水平距离
     static constexpr float ItemMinCorridorWidth = 30.0f;     // 走廊可用宽度低于此值不生成
     static constexpr float ItemSpawnMinHeight = 90.0f;       // 距地面最小生成高度
@@ -70,6 +72,7 @@ private:
     std::function<void()> onGiantOrb_;
 
     AudioSystem* audio_ = nullptr; // 拾取音效（由 Load 注入；nullptr 时静音）
+    const TuningParams* tuning_ = nullptr; // 调参（生成频率倍率；由 Load 注入）
 
     std::vector<std::shared_ptr<Sprite>>* Pool(int type);
     std::array<bool, ItemPoolCap>* Used(int type);

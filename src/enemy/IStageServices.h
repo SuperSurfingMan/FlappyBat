@@ -49,6 +49,10 @@ struct IPlayerCommands {
     virtual ~IPlayerCommands() = default;
 
     virtual void KillPlayer(const char* reason) = 0; // 统一死亡流程
+    // 一次性短护盾挡下一次受击并立即消失；返回 false 表示当前没有短护盾。
+    // 怪物侧的任意伤害源（含弹体/技能/撞边）都须先过这道闸门。
+    // 注意：无敌护盾（invincible）不经过这里——它由 ctx.batInvincible 判定。
+    virtual bool ConsumeShortShield() = 0;
     virtual void BounceBat(float dx, float dy) = 0;
     virtual void OnEnemyItemCollected(Vec2 pos) = 0;
     virtual void EndGiant() = 0;

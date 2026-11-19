@@ -40,13 +40,26 @@ public:
     float GetVelocity() const;
     void SetVelocity(float v);
 
+    // 物理参数只读（AutoPlay 感知填充用：预测轨迹须与实际积分同源）
+    float GetGravity() const { return gravity; }
+    float GetJumpStrength() const { return jumpStrength; }
+
+    // f: 垂直速度 -> 相对原贴图的俯仰目标角（弧度，纯函数，渲染用）。
+    // 模仿 Flappy Bird 的姿态机制：振翅瞬间满上仰（25°），无操作失速后
+    // 渐进低头、长坠饱和于垂直俯冲（90°）。两段均取 smoothstep（两端导数为 0）：
+    // 顶点处无折角、终端速度附近不抖动、中段翻头果断——不是线性映射。
+    // 角度约定同 bankAngle：正=逆时针（抬头）、负=顺时针（低头）。
+    static float PitchAngleFromVelocity(float velocity, float flapSpeed);
+
     // ===== 横向移动（躲避全高雷柱用；A/D 或 ←/→ 持续按住） =====
     static constexpr float HorizontalMoveSpeed = 200.0f; // 满速横移速度（px/s）
     float GetHorizontalSpeed() const;
     void SetHorizontalSpeed(float v); // 正=向右，负=向左
 
     void JumpNow();
-    void Falling(float dt);
+    // driftY：阵风等外力折算的纵向漂移速度(px/s)，直接叠加进位置积分。
+    // 不写回 velocity——振翅会整个覆写 velocity，写回去会让风在每次拍翅时失效。
+    void Falling(float dt, float driftY = 0.0f);
 
     // 物理积分之外的直接位移（击退/弹起等）后统一收口：把位置钳回窗口活动范围
     void ConstrainWithinWindow();
@@ -66,6 +79,7 @@ private:
 
     float horizontalSpeed = 0.0f; // 当前横向速度（Falling 中积分并夹紧在窗口边界内）
     float bankAngle = 0.0f;       // 当前横滚倾角（渲染用，弧度；正=逆时针）
+    float pitchAngle = 0.0f;      // 当前俯仰姿态角（渲染用，弧度；正=抬头/逆时针）
     float xBoundMin = 40.0f;      // 横向活动左边界（半身位余量）
     float xBoundMax = 500.0f;     // 横向活动右边界（LoadParamsFromConfig 按窗口宽计算）
     // 纵向活动边界（LoadParamsFromConfig 计算）：下界=地面致死线（terrain_height+EdgeContactMargin）、
@@ -74,6 +88,17 @@ private:
     float yBoundMin = 109.0f;     // 默认配置（terrain 99 + 触边半高 10）下的地面线
     float yBoundMax = 950.0f;     // 默认配置（屏高 960 - 触边半高 10）下的天花板线
     static constexpr float MaxBankAngle = 0.30f; // 满速横移时的最大倾角（约 17°）
+
+    // ===== 俯仰姿态（模仿 Flappy Bird：振翅抬头 / 无操作失速低头） =====
+    // 目标角由 PitchAngleFromVelocity 给出，Update 中指数平滑后与 bankAngle 合成。
+    // 相对原贴图转角值域 [-90°, +25°]：上仰上限 25°（振翅瞬间满上仰）、
+    // 俯冲上限 90°（长坠垂直扎下）——均为 Flappy Bird 经典取值；
+    // 若按“正=顺时针（低头为正）”的表述则值域为 [-25°, +90°]。
+    static constexpr float MaxPitchUpRad   = 0.43633f; // 上仰上限（25°）
+    static constexpr float MaxPitchDownRad = 1.57080f; // 俯冲上限（90°，即 π/2）
+    static constexpr float PitchEaseRate   = 15.0f;    // 俯仰角向目标收敛的速率（1/秒，指数平滑）
+    static constexpr float DownEngageV     = 0.40f;    // 下坠低头启动速度（×振翅初速）：越过后开始低头
+    static constexpr float DownFullV       = 3.20f;    // 下坠满俯冲速度（×振翅初速）：越过后饱和于 90°
 
     bool batHit = false;
 

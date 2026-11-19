@@ -12,19 +12,28 @@
 
 namespace {
 
-// ===== HUD 布局锚点（分数/能量/金币/俯冲）=====
+// ===== HUD 布局锚点（分数/无敌护盾/短护盾/金币）=====
 // SCORE：左上角紧邻帧率 overlay（Application 固定 (10,10) 的 ImGui 窗口）下方；
 // 金币：帧率 overlay 右侧、与其垂直居中（贴着 FPS 框）；
 // 天气消息盒：贴着 SCORE 栏下缘、向下可变高；
-// 能量组 + 俯冲长条：窗口底部中央并排一行（能量组在左、俯冲长条在右）。
+// 底部中央并排一行：[无敌护盾能量组] + 间距 + [短护盾 CD 长条]
+// （原「俯冲长条」随下坠冲刺取消而移除，位置由一次性短护盾接管）。
 constexpr float HudLeftX    = 24.0f;   // 左上列起点 x
 constexpr float HudScoreW   = 200.0f;  // SCORE 底板宽
 constexpr float HudScoreH   = 56.0f;   // SCORE 底板高
-constexpr float HudIconSize = 52.0f;   // 能量图标边长
-constexpr float HudBarW     = 142.0f;  // 能量槽宽
+constexpr float HudIconSize = 52.0f;   // 无敌护盾图标边长
+constexpr float HudBarW     = 142.0f;  // 无敌护盾能量槽宽
 constexpr float HudBarGap   = 6.0f;    // 图标与槽间距
 constexpr float HudCoinsW   = 88.0f;   // 金币胶囊宽
 constexpr float HudCoinsH   = 30.0f;   // 金币胶囊高
+
+// 短护盾长条几何（窗口底部中央，与无敌护盾能量组并排成一行）
+constexpr float ShortBarW = 150.0f;
+constexpr float ShortBarH = 32.0f;
+
+// 底部并排组：[无敌护盾图标|能量槽] + 间距 + [短护盾长条]，整组水平居中于窗口底部
+constexpr float HudGroupGap     = 10.0f; // 能量组与短护盾长条的并排间距
+constexpr float HudBottomGroupW = HudIconSize + HudBarGap + HudBarW + HudGroupGap + ShortBarW;
 
 // 帧率 overlay 几何估算（宽按 "FPS: 8888.8" 最宽情形估，防 fps 位数变化时金币框压住 overlay）
 float FpsBoxRightX() {
@@ -40,20 +49,13 @@ float ScorePanelCy() {
     return FpsBoxBottomY() + 2.0f + HudScoreH * 0.5f;
 }
 
-// 俯冲长条几何（窗口底部中央，与能量组并排成一行）
-constexpr float DiveBarW = 150.0f;
-constexpr float DiveBarH = 32.0f;
-
-// 底部并排组：[能量图标|能量槽] + 间距 + [俯冲长条]，整组水平居中于窗口底部
-constexpr float HudGroupGap     = 10.0f; // 能量组与俯冲长条的并排间距
-constexpr float HudBottomGroupW = HudIconSize + HudBarGap + HudBarW + HudGroupGap + DiveBarW;
 constexpr float HudBottomMargin = 12.0f; // 底部行距窗口底边（以组内最高的能量图标计）
 // 底部单行中心 y：全行元素垂直居中
 float BottomRowCy(float screenH) {
     return screenH - HudBottomMargin - HudIconSize * 0.5f;
 }
 
-// 沿圆角矩形周长自顶部中点顺时针描边 frac 比例（俯冲长条的冷却环绕动画）
+// 沿圆角矩形周长自顶部中点顺时针描边 frac 比例（短护盾长条的 CD 环绕动画）
 void StrokeRoundedRectPerimeter(ImDrawList* dl, ImVec2 pmin, ImVec2 pmax,
                                 float r, float frac, ImU32 col, float thickness) {
     const float w = pmax.x - pmin.x;
@@ -106,7 +108,7 @@ void StrokeRoundedRectPerimeter(ImDrawList* dl, ImVec2 pmin, ImVec2 pmax,
 } // namespace
 
 void StageHud::GetEnergyIconRect(const Snapshot& s, float& cx, float& cy, float& size) {
-    // 布局：窗口底部中央并排一行，能量组（图标+槽）在左、俯冲长条在右，整组水平居中；
+    // 布局：窗口底部中央并排一行，无敌护盾能量组在左、短护盾长条在右，整组水平居中；
     // 绘制与点击判定共用此几何
     size = HudIconSize;
     cx = s.screenW * 0.5f - HudBottomGroupW * 0.5f + size * 0.5f;
@@ -117,7 +119,7 @@ void StageHud::DrawPrimary(const Snapshot& s, UIWidget& energyIcon) {
     DrawScore(s);
     DrawEnergy(s, energyIcon);
     DrawCoins(s);
-    DrawDive(s);
+    DrawShortShield(s);
 }
 
 void StageHud::DrawOverlay(const Snapshot& s) {
@@ -165,7 +167,7 @@ void StageHud::DrawEnergy(const Snapshot& s, UIWidget& energyIcon) {
     if (!font) return;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
 
-    // ===== 布局：窗口底部中央并排一行，能量组（图标+槽）在俯冲长条左侧 =====
+    // ===== 布局：窗口底部中央并排一行，无敌护盾能量组在短护盾长条左侧 =====
     float iconSize, iconCx, rowY;
     GetEnergyIconRect(s, iconCx, rowY, iconSize);
     const float barX0 = iconCx + iconSize * 0.5f + HudBarGap; // 图标右缘 + 6
@@ -173,9 +175,9 @@ void StageHud::DrawEnergy(const Snapshot& s, UIWidget& energyIcon) {
     const float barH = 26.0f;
     const float barCx = barX0 + barW * 0.5f;
 
-    const bool isFull = s.energy >= 1.0f;
-    const bool isActive = s.shieldTimer > 0.0f;
-    float pulse = 0.5f + 0.5f * sin(s.pulseClock * 6.0f); // 0~1 脉冲
+    const bool isFull = s.energy >= 1.0f;              // 能量充满，可释放无敌护盾
+    const bool isActive = s.invincibleTimer > 0.0f;    // 无敌护盾生效中
+    const float pulse = 0.5f + 0.5f * sin(s.pulseClock * 6.0f); // 0~1 脉冲
 
     // ===== 图标（闪电） =====
     // 命中区与绘制共用同一份几何；仅能量充满时启用，未充满时点击自然透传给振翅
@@ -215,7 +217,7 @@ void StageHud::DrawEnergy(const Snapshot& s, UIWidget& energyIcon) {
             ImVec2(iconCx - w * 0.5f, rowY + h * 0.5f),
             ImVec2(iconCx + w * 0.1f, rowY), boltCol);
 
-        // 护盾生效中：图标外圈发光描边
+        // 无敌护盾生效中：图标外圈发光描边
         if (isActive) {
             dl->AddRect(ImVec2(iconCx - iconSize * 0.5f - 3, rowY - iconSize * 0.5f - 3),
                         ImVec2(iconCx + iconSize * 0.5f + 3, rowY + iconSize * 0.5f + 3),
@@ -229,9 +231,10 @@ void StageHud::DrawEnergy(const Snapshot& s, UIWidget& energyIcon) {
         UITheme::ToImU32({0.07f, 0.05f, 0.13f}, 0.85f),
         UITheme::ToImU32(isActive ? UITheme::Moonlight : UITheme::AmberDim, 0.9f), 2.0f);
 
-    // ===== 填充 =====
+    // ===== 填充：生效期显示剩余时长，否则显示充能进度 =====
     const float pad = 4.0f;
-    float frac = isActive ? s.shieldTimer / s.shieldDuration : s.energy;
+    float frac = isActive ? s.invincibleTimer / std::max(s.invincibleDuration, 0.001f)
+                          : s.energy;
     frac = std::clamp(frac, 0.0f, 1.0f);
     if (frac > 0.001f) {
         float fillW = (barW - pad * 2.0f) * frac;
@@ -253,6 +256,59 @@ void StageHud::DrawEnergy(const Snapshot& s, UIWidget& energyIcon) {
         ImU32 c = pulse > 0.5f ? ImGui::GetColorU32(ImVec4(1, 1, 1, 0.95f))
                                : ImGui::GetColorU32(ImVec4(0.15f, 0.1f, 0.02f, 0.9f));
         UIBuilder::DrawCenteredText("按空格释放", barCx, rowY, 18.0f, c);
+    }
+}
+
+// 一次性短护盾：CD 长条（原俯冲长条的位置与几何），不占用无敌护盾的能量槽。
+void StageHud::DrawShortShield(const Snapshot& s) {
+    ImFont* font = UIBuilder::GetFont();
+    if (!font) return;
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+
+    const float w = ShortBarW;
+    const float h = ShortBarH;
+    const float cx = s.screenW * 0.5f + HudBottomGroupW * 0.5f - w * 0.5f;
+    const float cy = BottomRowCy(s.screenH);
+
+    const bool active = s.shortShieldTimer > 0.0f;
+    const bool ready = s.shortShieldCooldown <= 0.0f && !active;
+    const float pulse = 0.5f + 0.5f * sin(s.pulseClock * 6.0f);
+
+    UIBuilder::DrawRoundedRect(cx, cy, w, h, 8.0f,
+                               UITheme::ToImU32({0.07f, 0.05f, 0.13f}, 0.85f),
+                               active ? UITheme::ToImU32(UITheme::Moonlight, 0.9f)
+                               : ready ? UITheme::ToImU32(UITheme::Amber, 0.65f + 0.3f * pulse)
+                                       : UITheme::ToImU32(UITheme::AmberDim, 0.45f),
+                               1.5f);
+
+    // 内容：盾形圆环 + 状态文字，作为一组在条内居中
+    const char* label = active ? "护盾中" : (ready ? "短护盾 S" : nullptr);
+    char buf[24];
+    if (!active && !ready) {
+        snprintf(buf, sizeof(buf), "%.1fs", s.shortShieldCooldown);
+        label = buf;
+    }
+    ImU32 col = active ? UITheme::ToImU32(UITheme::Moonlight)
+                       : (ready ? UITheme::ToImU32(UITheme::Amber)
+                                : UITheme::ToImU32(UITheme::Moonlight, 0.9f));
+    const ImVec2 ts = UIBuilder::CalcTextSize(label, 20.0f);
+    const float iconR = 8.0f;
+    const float groupW = iconR * 2.0f + 8.0f + ts.x;
+    const float iconCx = cx - groupW * 0.5f + iconR;
+    dl->AddCircle(ImVec2(iconCx, cy), iconR, col, 20, 2.0f);
+    dl->AddCircle(ImVec2(iconCx, cy), iconR * 0.55f, col, 16, 1.2f);
+    UIBuilder::DrawCenteredText(label,
+                                cx - groupW * 0.5f + iconR * 2.0f + 8.0f + ts.x * 0.5f,
+                                cy, 20.0f, col);
+
+    // 冷却进度：自长条顶部中点起沿整个周长顺时针描边（剩余比例）
+    if (s.shortShieldCooldown > 0.0f && s.shortShieldCooldownTotal > 0.0f) {
+        const float frac = s.shortShieldCooldown / s.shortShieldCooldownTotal;
+        StrokeRoundedRectPerimeter(dl,
+                                   ImVec2(cx - w * 0.5f - 2.0f, cy - h * 0.5f - 2.0f),
+                                   ImVec2(cx + w * 0.5f + 2.0f, cy + h * 0.5f + 2.0f),
+                                   10.0f, frac,
+                                   UITheme::ToImU32({0.57f, 0.85f, 0.95f}, 0.8f), 2.0f);
     }
 }
 
@@ -285,53 +341,6 @@ void StageHud::DrawCoins(const Snapshot& s) {
                 ImGui::GetColorU32(ImVec4(0, 0, 0, 0.8f)), coinStr.c_str());
     dl->AddText(font, 18.0f, ImVec2(icx + 18.0f, rowY - 9.0f),
                 UITheme::ToImU32(UITheme::Amber), coinStr.c_str());
-}
-
-void StageHud::DrawDive(const Snapshot& s) {
-    ImFont* font = UIBuilder::GetFont();
-    if (!font) return;
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
-
-    // 长条底板：窗口底部中央并排一行，位于能量组右侧（整组水平居中）
-    const float w = DiveBarW;
-    const float h = DiveBarH;
-    const float cx = s.screenW * 0.5f + HudBottomGroupW * 0.5f - w * 0.5f;
-    const float cy = BottomRowCy(s.screenH);
-
-    const bool ready = s.diveCooldown <= 0.0f && !s.diving;
-    const bool diving = s.diving;
-    float pulse = 0.5f + 0.5f * sin(s.pulseClock * 6.0f);
-
-    UIBuilder::DrawRoundedRect(cx, cy, w, h, 8.0f,
-                               UITheme::ToImU32({0.07f, 0.05f, 0.13f}, 0.85f),
-                               ready ? UITheme::ToImU32(UITheme::Amber, 0.65f + 0.3f * pulse)
-                                     : UITheme::ToImU32(UITheme::AmberDim, 0.45f),
-                               1.5f);
-
-    // 内容：向下三角（俯冲意象）+「俯冲」文字，作为一组在条内居中；
-    // 配色：俯冲中冰蓝 / 就绪金 / 冷却置灰
-    const float tri = 10.0f;
-    ImU32 col = diving ? UITheme::ToImU32({0.57f, 0.85f, 0.95f})
-                       : (ready ? UITheme::ToImU32(UITheme::Amber)
-                                : UITheme::ToImU32(UITheme::AmberDim, 0.7f));
-    const ImVec2 ts = UIBuilder::CalcTextSize("俯冲", 20.0f);
-    const float groupW = tri * 2.0f + 10.0f + ts.x;
-    const float triCx = cx - groupW * 0.5f + tri;
-    dl->AddTriangleFilled(ImVec2(triCx - tri, cy - tri * 0.6f), ImVec2(triCx + tri, cy - tri * 0.6f),
-                          ImVec2(triCx, cy + tri), col);
-    UIBuilder::DrawCenteredText("俯冲",
-                                cx - groupW * 0.5f + tri * 2.0f + 10.0f + ts.x * 0.5f,
-                                cy, 20.0f, col);
-
-    // 冷却进度：自长条顶部中点起沿整个长条周长顺时针描边（剩余比例），替代原圆弧转圈
-    if (s.diveCooldown > 0.0f && s.diveCooldownTotal > 0.0f) {
-        const float frac = s.diveCooldown / s.diveCooldownTotal;
-        StrokeRoundedRectPerimeter(dl,
-                                   ImVec2(cx - w * 0.5f - 2.0f, cy - h * 0.5f - 2.0f),
-                                   ImVec2(cx + w * 0.5f + 2.0f, cy + h * 0.5f + 2.0f),
-                                   10.0f, frac,
-                                   UITheme::ToImU32({0.57f, 0.85f, 0.95f}, 0.8f), 2.5f);
-    }
 }
 
 void StageHud::DrawModeTimer(const Snapshot& s) {

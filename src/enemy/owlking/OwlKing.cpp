@@ -4,6 +4,7 @@
 #include "render/SpriteRenderer.h"
 #include "res/ResourceManager.h"
 #include "core/Config.h"
+#include "app/TuningParams.h"
 #include "audio/AudioSystem.h"
 #include "enemy/IStageServices.h"
 #include "app/UnifiedSave.h"
@@ -86,9 +87,10 @@ std::string OwlKing::ArtKey(const char* legacyKey) {
     return (s_artBatch == ArtBatch::Vector) ? std::string(legacyKey) + "_vec" : std::string(legacyKey);
 }
 
-void OwlKing::Init(const Config& cfg, ResourceManager& res) {
+void OwlKing::Init(const Config& cfg, ResourceManager& res, const TuningParams& tuning) {
     cfg_ = &cfg;
     res_ = &res;
+    tuning_ = &tuning;
     auto& rm = res;
     LoadArtBatchPref(); // 进入游戏前读批次偏好（静态开关，设置页可再切）
 
@@ -170,9 +172,12 @@ void OwlKing::EnterWarning(const EnemyContext& ctx) {
     everSpawned = true;
     spawnCount++;
     // 再降临 HP 递增（经典 ×1.5/次，上限 400；一场内多次降临的泛化规则）
+    // 血量倍率来自设置页「参数调节」：基础血量与 400 上限同步缩放，
+    // 否则高倍率会被上限吃掉（与 web 移植版同语义）
     const Tuning& t = TuningFor(ctx.mode);
+    const float hpScale = tuning_->OwlHpScale();
     float mult = 1.f + 0.5f * (float)(spawnCount - 1);
-    hpMax = (int)std::min((float)t.hpBase * mult, 400.f);
+    hpMax = (int)std::min((float)t.hpBase * mult * hpScale, 400.f * hpScale);
     hp = hpMax;
     combatHits = 0;
     batHearts = BatHeartsMax;
@@ -182,7 +187,7 @@ void OwlKing::EnterWarning(const EnemyContext& ctx) {
     std::cout << "[Boss] Warning started (spawn #" << spawnCount
               << ", hp " << hpMax << ")" << std::endl;
     ctx.fxFx->PostWeatherMsg(WeatherSlot(), "夜枭将至", 2.0f, false); // 5s 预警（闪烁，提前量同场景预警惯例）
-    ctx.fxFx->PlaySFX((int)SFX::Thunder, 0.5f); // §3/§8 枭鸣前奏（一期复用雷音低音量）
+    ctx.fxFx->PlaySFX((int)SFX::Thunder, 1.0f); // §3/§8 枭鸣前奏（一期复用雷音低音量）
 }
 
 void OwlKing::EnterEngagement(const EnemyContext& ctx) {
@@ -222,6 +227,7 @@ void OwlKing::EnterDefeat() {
     eco.AddCoins(coinBonus);
     eco.AddTimeLimit(8.0f); // 限时模式 +8s（非限时为空操作）
     fx.RemoveWeatherMsg(WeatherSlot());
+    fx.RemoveWeatherMsg(SkillMsgSlot()); // 技能预警行随击杀一并撤除（对齐 EnterHidden 的全行清理教义）
     fx.FloatTextAt("枭王陨落！", Vec2{ctx_->screenW * 0.5f, ctx_->screenH - 220.f},
                  UITheme::Amber.r, UITheme::Amber.g, UITheme::Amber.b, 30.f, 2.5f);
     fx.FloatTextAt("+" + std::to_string(scoreBonus) + " 分  +" + std::to_string(coinBonus) + " 金币",
@@ -251,6 +257,7 @@ void OwlKing::EnterLeave() {
     skillState = SkillState::Idle;
     IFeedbackFx& fx = *ctx_->fxFx;
     fx.RemoveWeatherMsg(WeatherSlot());
+    fx.RemoveWeatherMsg(SkillMsgSlot()); // 技能预警行不残留到离场演出（同 EnterHidden 教义）
     fx.PostWeatherMsg(WeatherSlot(), "枭王隐去", 1.5f, false);
     std::cout << "[Boss] Left (timeout)." << std::endl;
 }
@@ -289,7 +296,7 @@ void OwlKing::Update(float dt, const EnemyContext& ctx) {
 
     // 输入意图：音爆冲击波（原场景路由；此刻状态=上一帧末，时序与原实现一致）
     if (ctx.firePrimary && TryFireSonic(ctx.batPos)) {
-        ctx.fxFx->PlaySFX((int)SFX::Thunder, 0.4f); // 发射反馈（一期复用雷音低音量）
+        ctx.fxFx->PlaySFX((int)SFX::Thunder, 1.0f); // 发射反馈（一期复用雷音低音量）
         ctx.fxPlayer->BounceBat(-SonicRecoil, 0.f);     // 发射后坐：向左位移回弹（§4.3）
     }
 
@@ -437,4 +444,95 @@ EncounterRules OwlKing::ActiveRules() const {
     r.scrimBoost = 0.10f;          // 天色额外压暗（§9 +0.10；二期启用）
     r.minRainIntensity = 0.80f;    // 雨强下限抬到 ≥80%（§9：血月雨夜意象；结束回落档位基线）
     return r;
+}
+
+// ===== 威胁快照上报（CaptureSense）：把当前威胁几何写给 AutoPlay 等观察者 =====
+// 只读搬运，不改任何状态；几何与判定同源（半径/缺口半宽直接取判定常量），
+// 时长经 TelegraphDur/ActiveDur 共用表，观察侧无需复制任何本类内部常量。
+void OwlKing::CaptureSense(EnemySense& out) const {
+    out.present = true;
+    switch (phase) {
+        case Phase::Hidden:     out.phase = EnemySensePhase::Hidden; break;
+        case Phase::Warning:    out.phase = EnemySensePhase::Warning; break;
+        case Phase::Engagement: out.phase = EnemySensePhase::Engagement; break;
+        case Phase::Defeat:     out.phase = EnemySensePhase::Defeat; break;
+        case Phase::Leave:      out.phase = EnemySensePhase::Leave; break;
+    }
+    switch (curSkill) {
+        case Skill::None:         out.skill = EnemySenseSkill::None; break;
+        case Skill::FeatherStorm: out.skill = EnemySenseSkill::FeatherStorm; break;
+        case Skill::MoonGaze:     out.skill = EnemySenseSkill::MoonGaze; break;
+        case Skill::ShadowDash:   out.skill = EnemySenseSkill::ShadowDash; break;
+        case Skill::ScreechWave:  out.skill = EnemySenseSkill::ScreechWave; break;
+        case Skill::StormCall:    out.skill = EnemySenseSkill::StormCall; break;
+        case Skill::BloodRain:    out.skill = EnemySenseSkill::BloodRain; break;
+    }
+    switch (skillState) {
+        case SkillState::Idle:      out.skillState = EnemySenseSkillState::Idle; break;
+        case SkillState::Telegraph: out.skillState = EnemySenseSkillState::Telegraph; break;
+        case SkillState::Active:    out.skillState = EnemySenseSkillState::Active; break;
+        case SkillState::Fatigue:   out.skillState = EnemySenseSkillState::Fatigue; break;
+    }
+    out.skillTimer = skillTimer;
+    out.skillStateDur = (skillState == SkillState::Telegraph) ? TelegraphDur(curSkill)
+                        : (skillState == SkillState::Active)  ? ActiveDur()
+                        : (skillState == SkillState::Fatigue) ? FatigueDur
+                                                              : intervalTimer;
+    out.bossY = bossY;
+    out.batHearts = batHearts;
+    out.sonicCharge = sonicCharge;
+    out.gazeY = gazeY;
+    out.gazeDir = gazeDir;
+    out.shadowBandY = shadowBandY;
+    out.arcCenterX = BossPosX - BossHitHalfW; // B4 弧心（弧仅向其左半场扩散）
+
+    // B4 音波弧：当前半径 = 扩张速度 x 存续年龄（缺口几何随弧上报）
+    out.waves.clear();
+    for (const auto& sc : screeches) {
+        if (!sc.alive) continue;
+        EnemySense::Wave w;
+        w.alive = true;
+        w.radius = ScreechSpeed * sc.age;
+        w.speed = ScreechSpeed;
+        w.gapY = sc.gapY;
+        w.gapHalf = ScreechGapHalf;
+        w.centerY = sc.centerY;
+        out.waves.push_back(w);
+    }
+
+    // 点弹体：羽刃（带速度）+ 坠羽（恒速下落），观察侧按速度直线外推
+    out.projectiles.clear();
+    out.projectiles.reserve(feathers.items.size() + bloodDrops.size());
+    for (const auto& f : feathers.items) {
+        if (!f.alive) continue;
+        EnemySense::Projectile p;
+        p.alive = true;
+        p.pos = f.pos;
+        p.vel = f.vel;
+        p.hasVel = true;
+        out.projectiles.push_back(p);
+    }
+    for (const auto& d : bloodDrops) {
+        if (!d.alive) continue;
+        EnemySense::Projectile p;
+        p.alive = true;
+        p.pos = d.pos;
+        p.vel = d.vel; // 弹反后已重算为飞向本体的速度，观察侧按当前速度外推
+        p.hasVel = true;
+        out.projectiles.push_back(p);
+    }
+
+    // B5 雷暴三落点（Active 起有效；落雷本体经场景落雷管线另行可见）
+    out.stormXs[0] = stormXs[0];
+    out.stormXs[1] = stormXs[1];
+    out.stormXs[2] = stormXs[2];
+    out.stormArmed = (phase == Phase::Engagement &&
+                      curSkill == Skill::StormCall && skillState == SkillState::Active);
+
+    // B6 顶部标记列（预警期先亮出第一批，0.5s 换批——观察侧逐帧重读即可）
+    for (size_t i = 0; i < bloodCols.size() && i < 4; ++i) out.bloodCols[i] = bloodCols[i];
+    out.bloodColsActive = (phase == Phase::Engagement &&
+                           curSkill == Skill::BloodRain &&
+                           (skillState == SkillState::Telegraph ||
+                            skillState == SkillState::Active));
 }

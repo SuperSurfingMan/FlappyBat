@@ -140,7 +140,9 @@ void Application::Run()
         projection
     );
     spriteRenderer->SetProjection(projection);
-    services->Audio().PlayBGM("assets/Audio/Music/Background Music.mp3");
+    // BGM 实测 -17.9 LUFS-K，与 SFX 统一目标 -20 对齐需 -2.1dB（0.785x）。
+    // 用每曲增益而非重编码 mp3：避免二次有损，也不改动用户保存的音量设置。
+    services->Audio().PlayBGM("assets/Audio/Music/Background Music.mp3", true, 0.785f);
     services->Audio().SetMasterVolume(1.f);
 
     int frameCount = 0;

@@ -43,6 +43,10 @@ public:
     // 统一 Update 入口:推进流向切换、起止淡入淡出与线群流动
     void Update(float dt) override;
 
+    // 新一局/局末：立即抹掉风线，不等淡出。intensity_、线群与阵风状态都在本类内部，
+    // WeatherDirector::Reset 只清逻辑字段时不会触及它们，必须经此钩子归零。
+    void ResetFx() override;
+
     // 实例化绘制认领槽位(整体强度 <= 0 时为空操作)
     void Render(const RenderContext& ctx, WorldSlot slot) override;
 

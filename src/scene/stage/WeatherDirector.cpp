@@ -1,5 +1,6 @@
 #include "scene/stage/WeatherDirector.h"
 #include "gameplay/StageParams.h"
+#include "app/TuningParams.h"
 #include "core/Config.h"
 #include "render/SpriteRenderer.h"
 #include "scene/stage/WeatherRendererRoster.h"
@@ -37,8 +38,10 @@ void WeatherDirector::AddRenderer(std::unique_ptr<IRenderer> renderer) {
         slotOwners_[(size_t)s].push_back(p);
 }
 
-void WeatherDirector::Init(const Config& cfg, ResourceManager& res, AudioSystem& audio) {
+void WeatherDirector::Init(const Config& cfg, ResourceManager& res, AudioSystem& audio,
+                           const TuningParams& tuning) {
     cfg_ = &cfg;
+    tuning_ = &tuning;
     rainSystem = res.GetRainSystem();
 
     // 落雷音效：雨系统只负责"该响了"，具体发声由本导演装配（逻辑与音频解耦）
@@ -68,23 +71,47 @@ void WeatherDirector::Init(const Config& cfg, ResourceManager& res, AudioSystem&
 }
 
 void WeatherDirector::Reset() {
+    StopGust(); // 阵风三段式状态 + 消息行
     msgBox_.Reset();
     gustCooldown = 7.0f;
-    gustTimer = 0.0f;
-    gustForce = Vec2{0.0f, 0.0f};
-    gustWarnTimer = 0.0f;
-    gustPendingDuration = 0.0f;
     scrimAlpha = 0.0f;
     scrimTargetAlpha = 0.0f;
     rainBaseline = 0.70f;
     if (stormScrimSprite) stormScrimSprite->SetColor(0.05f, 0.06f, 0.13f, 0.0f);
     if (rainSystem) rainSystem->Reset();
+
+    // 风线是自驱动粒子：淡入强度/线群位置只存在 WindRenderer 内部，
+    // 上面的逻辑字段归零碰不到它们。不显式下发就会把上一局冻结的风线
+    // 一直画到结算画面、乃至「重新开始」后的 3-2-1 倒数与开局。
+    for (auto& r : renderers_) r->ResetFx();
+}
+
+void WeatherDirector::StopGust() {
+    if (gustTimer > 0.0f || gustWarnTimer > 0.0f) Remove(WMsgGust);
+    gustTimer = 0.0f;
+    gustWarnTimer = 0.0f;
+    gustPendingDuration = 0.0f;
+    gustForce = Vec2{0.0f, 0.0f};
+    gustPendingForce = Vec2{0.0f, 0.0f};
 }
 
 void WeatherDirector::OnEnter(float lightningWarnLead) {
     if (!rainSystem) return;
     rainSystem->SetLightningWarnLead(lightningWarnLead);
-    rainSystem->StartRandomLightning(5.0f, 10.0f);
+    const Vec2 interval = ScaledLightningInterval(5.0f, 10.0f);
+    rainSystem->StartRandomLightning(interval.x, interval.y);
+}
+
+Vec2 WeatherDirector::ScaledLightningInterval(float minSec, float maxSec) const {
+    // 名义间隔 ÷ 雷击频率倍率（倍率越大雷越频繁）；钳一个正下限，手改存档也不会除出天文数字
+    const float scale = std::max(tuning_->ThunderFreqScale(), 0.1f);
+    return Vec2{minSec / scale, maxSec / scale};
+}
+
+void WeatherDirector::ScheduleLightning(float minSec, float maxSec) {
+    if (!rainSystem) return;
+    const Vec2 interval = ScaledLightningInterval(minSec, maxSec);
+    rainSystem->SetLightningIntervals(interval.x, interval.y);
 }
 
 void WeatherDirector::SetRainScrollSpeed(float v) {
@@ -95,12 +122,15 @@ void WeatherDirector::AdvanceRain(float dt) {
     if (rainSystem) rainSystem->Update(dt);
 }
 
-void WeatherDirector::UpdateFx(float dt) {
+void WeatherDirector::UpdateFx(float dt, bool forceIdle) {
     // 帧数据经 IRenderer 默认虚方法统一下行（只有风线渲染器消费），
     // 再多态推进；雨/雷逻辑数据在 RainSystem 内，由 AdvanceRain 推进。
-    const bool gustActive = gustTimer > 0.0f;
+    // forceIdle：玩法冻结阶段（死亡动画/结算/入场）不依赖 gustTimer，直接按无风下行，
+    // 让风线走完淡出而不是静止残留。
+    const bool gustActive = !forceIdle && gustTimer > 0.0f;
+    const Vec2 force = gustActive ? gustForce : Vec2{0.0f, 0.0f};
     for (auto& r : renderers_) {
-        r->SetGust(gustActive, gustForce);
+        r->SetGust(gustActive, force);
         r->Update(dt);
     }
 }
@@ -127,14 +157,11 @@ void WeatherDirector::UpdateGust(float dt, const StageFrame& f, const ModeParams
     // 段落期（怪物接管）：阵风暂停（§9 避免与技能双重位移压力）；
     // 进行中/预警中的阵风立即取消并移除消息行，冷却冻结
     if (f.pauseGust) {
-        if (gustTimer > 0.0f || gustWarnTimer > 0.0f) Remove(WMsgGust);
-        gustTimer = 0.0f;
-        gustWarnTimer = 0.0f;
-        gustForce = Vec2{0.0f, 0.0f};
+        StopGust(); // 冷却不动 = 冻结；推力/计时/消息行一并清空
         return;
     }
 
-    // 气流生效中：只维护推力向量与计时；纵向分量由玩家子系统在蝙蝠积分前施加
+    // 气流生效中：只维护推力向量与计时；四向漂移由玩家子系统在蝙蝠积分时叠加
     if (gustTimer > 0.0f) {
         gustTimer = std::max(0.0f, gustTimer - dt);
         if (gustTimer <= 0.0f) {
@@ -144,11 +171,13 @@ void WeatherDirector::UpdateGust(float dt, const StageFrame& f, const ModeParams
         return;
     }
 
-    // 预警中（2s）：消息盒闪烁预报，尚无推力
+    // 预警中（2s）：消息盒闪烁预报，推力暂存 pending，gustForce 保持零
     if (gustWarnTimer > 0.0f) {
         gustWarnTimer = std::max(0.0f, gustWarnTimer - dt);
         if (gustWarnTimer <= 0.0f) {
-            // 预警结束 -> 气流生效：消息转常驻状态行
+            // 预警结束 -> 气流生效：推力转正式，消息转常驻状态行
+            gustForce = gustPendingForce;
+            gustPendingForce = Vec2{0.0f, 0.0f};
             gustTimer = gustPendingDuration;
             SetSteady(WMsgGust, GustStateText(gustForce));
         }
@@ -165,16 +194,17 @@ void WeatherDirector::UpdateGust(float dt, const StageFrame& f, const ModeParams
         float forceMax = GustForceMax * p.gustForceFactor;
         float mag = forceMax * strength;
         switch (dirIdx) {
-            case 0:  gustForce = Vec2{0.0f,  mag}; break; // 上
-            case 1:  gustForce = Vec2{0.0f, -mag}; break; // 下
-            case 2:  gustForce = Vec2{-mag, 0.0f}; break; // 左
-            default: gustForce = Vec2{ mag, 0.0f}; break; // 右
+            case 0:  gustPendingForce = Vec2{0.0f,  mag}; break; // 上
+            case 1:  gustPendingForce = Vec2{0.0f, -mag}; break; // 下
+            case 2:  gustPendingForce = Vec2{-mag, 0.0f}; break; // 左
+            default: gustPendingForce = Vec2{ mag, 0.0f}; break; // 右
         }
+        gustForce = Vec2{0.0f, 0.0f}; // 预警期绝不施加推力
         gustPendingDuration = GustDurationMin + (GustDurationMax - GustDurationMin) * Random::Get().GetRandomFloat();
         gustCooldown = p.gustIntervalMin +
                        (p.gustIntervalMax - p.gustIntervalMin) * Random::Get().GetRandomFloat();
 
-        Post(WMsgGust, GustWarnText(gustForce), WeatherWarnLead, false);
+        Post(WMsgGust, GustWarnText(gustPendingForce), WeatherWarnLead, false);
         gustWarnTimer = WeatherWarnLead;
     }
 }
@@ -206,7 +236,7 @@ void WeatherDirector::ApplyForTier(int tier, const ModeParams& p) {
     if (p.stormWeather) {
         rainBaseline = p.stormRain;
         rainSystem->SetRainIntensity(p.stormRain);
-        rainSystem->SetLightningIntervals(p.stormLightningMin, p.stormLightningMax);
+        ScheduleLightning(p.stormLightningMin, p.stormLightningMax);
         scrimTargetAlpha = p.stormScrim;
         return;
     }
@@ -217,7 +247,7 @@ void WeatherDirector::ApplyForTier(int tier, const ModeParams& p) {
     rainBaseline = 0.70f + 0.30f * t;
     rainSystem->SetRainIntensity(rainBaseline);
     // 落雷更频繁：5~10s -> 2.5~5s
-    rainSystem->SetLightningIntervals(5.0f - 2.5f * t, 10.0f - 5.0f * t);
+    ScheduleLightning(5.0f - 2.5f * t, 10.0f - 5.0f * t);
     // 天色自第 2 档起渐深，最深 0.32
     scrimTargetAlpha = 0.32f * std::clamp((tier - 1) / (float)(kMaxDifficultyTier - 1), 0.0f, 1.0f);
 }
@@ -279,6 +309,24 @@ bool WeatherDirector::CheckStrikeHit(Vec2 batPos) const {
         if (d < halfW + LightningBatRadius) return true;
     }
     return false;
+}
+
+// ===== AutoPlay 感知：落雷全生命周期快照（只读；经 RainSystem 既有公开接口转填）=====
+void WeatherDirector::CaptureLightningSense(LightningSense& out) const {
+    out.warning = rainSystem && rainSystem->GetLightningPhase() == RainSystem::LightningPhase::Warning;
+    out.dangerActive = rainSystem && rainSystem->IsStrikeDangerous();
+    out.strikeX = rainSystem ? rainSystem->GetStrikeX() : 0.f;
+    out.warnRemaining = rainSystem ? rainSystem->GetWarningTimer() : 0.f;
+    out.boltPoints.clear();
+    out.boltWidths.clear();
+    if (!out.warning && !out.dangerActive) return; // 空闲期无雷线可看
+    const auto& pts = rainSystem->GetLightning().mainBranch.points;
+    out.boltPoints.reserve(pts.size());
+    out.boltWidths.reserve(pts.size());
+    for (size_t i = 0; i < pts.size(); ++i) {
+        out.boltPoints.push_back(pts[i]);
+        out.boltWidths.push_back(rainSystem->GetMainBranchWidthAt(i));
+    }
 }
 
 void WeatherDirector::DrawLightningWarning(float pulseClock) {

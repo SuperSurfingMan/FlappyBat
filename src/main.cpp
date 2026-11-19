@@ -4,7 +4,9 @@
 #include "app/Achievements.h"
 #include "app/PlayerProfile.h"
 #include "app/ScoreRank.h"
+#include "app/TuningParams.h"
 #include "audio/AudioSystem.h"
+#include "autoplay/AutoPilotDirector.h"
 #include "core/Config.h"
 #include "gameplay/ModeRegistry.h"
 #include "render/SpriteRenderer.h"
@@ -45,6 +47,15 @@ int main()
     PlayerProfile&   profile = PlayerProfile::Get();
     UISystem&        ui      = UISystem::Get();
 
+    // 调参：唯一的"设置页可改"玩法参数集（构造即读统一存档 P 行）。
+    // 不做成单例——它是纯数据对象，随组合根栈上存活，比所有消费方都长命。
+    TuningParams     tuning;
+
+    // 自动演示导演：策略注册表 + 设置页开关（构造即读统一存档 U 行）。
+    // 内置策略在此登记（当前仅经典模式注册策略，其它模式自动演示不生效）。
+    AutoPilotDirector autoPilot;
+    RegisterBuiltinPolicies(autoPilot);
+
     // 生命周期要点：Services 必须在 scenes / app 之后析构。
     // 声明顺序决定析构逆序——先声明持有者、后构造，保证 `~SceneManager` 里
     // 可能发生的 OnExit 仍能看到活的 Services&（退出路径已显式 ExitCurrentScene）。
@@ -53,7 +64,7 @@ int main()
     Application  app;
 
     servicesHolder = std::make_unique<Services>(
-        cfg, audio, res, scores, ach, profile, ui, scenes, app);
+        cfg, audio, res, scores, ach, profile, tuning, autoPilot, ui, scenes, app);
     Services& services = *servicesHolder;
 
     // 组合根：登记转场效果的构造工厂，SceneManager 不认识具体转场类型

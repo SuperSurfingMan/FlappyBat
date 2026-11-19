@@ -12,6 +12,7 @@
 #include "gameplay/StageParams.h"        // 模式参数兼容头（与天气子系统共用）
 #include "ui/UIWidget.h"          // 局内 HUD 热区控件（能量图标）需完整类型
 #include "ui/GameInput.h"        // 玩法输入快照与接收接口（蝙蝠操控由 UISystem 推送）
+#include "autoplay/IAutoPilotPolicy.h" // Auto Play 动作意图/感知契约（决策经 Services 下的导演）
 #include "ui/InputScope.h"       // 能量图标组的启用/禁用（与模态约束一致）
 #include "layer/LayerStack.h"    // 屏幕覆盖层组合容器
 #include "scene/stage/ParallaxField.h"      // 背景/前景/地面三段视差滚动
@@ -20,7 +21,7 @@
 #include "scene/stage/FeedbackFx.h"        // 飘字与全局抖动（纯表现）
 #include "scene/stage/WeatherDirector.h"   // 阵风/落雷/消息盒/天色（IRenderer 注册表：雨/雷/风）
 #include "render/WorldSlot.h"            // 世界渲染槽位（Render 的槽位管线）
-#include "scene/stage/PlayerAbilities.h"   // 护盾/俯冲/巨化/慢动作/蝙蝠运动
+#include "scene/stage/PlayerAbilities.h"   // 短护盾/巨化/慢动作/蝙蝠运动
 #include "scene/stage/ObstacleField.h"    // 管道池/变体/碰撞/飞行回收
 #include "scene/stage/ItemField.h"        // 道具池/生成/拾取/巨化星
 #include "scene/stage/RunFlow.h"          // 模式/分数/连击/限时/入场/门控
@@ -84,7 +85,7 @@ private:
     LayerStack overlayLayers;
 
     // ===== 局内 HUD 交互控件 =====
-    // 能量图标热区：仅充满时可命中（释放护盾）；未满时不启用，
+    // 无敌护盾图标（闪电）热区：能量充满且护盾未生效时可点击释放；未满不启用，
     // 点击自然透传给振翅。命中判定与事件派发均由 UISystem 完成。
     // 热区控件统一用 shared_ptr 登记（所有权由本场景与 UISystem 共享，不再传址）
     std::shared_ptr<UIWidget> energyIcon = std::make_shared<UIWidget>();
@@ -103,6 +104,14 @@ private:
     StageHud::Snapshot BuildHudSnapshot() const;
     // 子系统帧快照：怪物规则在此摊平为布尔/数值，子系统不认识 EnemyDirector
     StageFrame BuildFrame(float dt) const;
+
+    // ===== Auto Play（自动演示，开闭点在 autoplay/ 域：策略注册于 AutoPilotRoster）=====
+    // 每帧在障碍推进后、蝙蝠运动前向导演要一次决策；动作意图挂到 StageFrame::autoPilot
+    // 走人类输入同路（振翅音效/边界钳制/无敌护盾能量闸门/短护盾 CD 闸门全部复用），
+    // 未武装时意图归零，行为与既有版本完全一致
+    void FillAutoPilotSenses(const StageFrame& f, AutoPilotSenses& s) const; // 各子系统只读快照聚合
+    AutoPilotActions autoPilotActions_{}; // 本帧 AI 动作意图（未武装恒为零值）
+    bool autoPilotActive_ = false;        // 本帧是否武装（决定 StageFrame::autoPilot 指针）
 
     // ===== 难度递进（A1）：速度/间隙随分数分档变化 =====
     int GetCurrentDifficultyTier() const;
@@ -145,6 +154,7 @@ private:
     void AddTimeLimit(float sec) override;
     void ReportAchievement(std::string_view eventKey, long long value) override;
     void KillPlayer(const char* reason) override; // 统一致死入口：碰撞/落雷/怪物共用
+    bool ConsumeShortShield() override; // 一次性短护盾挡下一次受击并立即消失（怪物侧伤害闸门）
     void BounceBat(float dx, float dy) override;
     void OnEnemyItemCollected(Vec2 pos) override;
     void EndGiant() override; // 巨化冲撞命中怪物后立即结束巨化（还原体型/终止无敌）
@@ -179,7 +189,7 @@ private:
     StageHud hud;              // 常驻 HUD（快照驱动，不持玩法状态）
     FeedbackFx fx;             // 飘字 + 全局抖动
     WeatherDirector weather;   // 阵风/落雷/消息盒/天色（含雨/雷/风渲染器）
-    PlayerAbilities player;    // 护盾/俯冲/巨化/慢动作/蝙蝠运动
+    PlayerAbilities player;    // 短护盾/弹反窗口/巨化/慢动作/蝙蝠运动
     ObstacleField obstacles;   // 管道池/变体/碰撞/飞行回收
     ItemField items;           // 道具池/生成/拾取/巨化星
 };

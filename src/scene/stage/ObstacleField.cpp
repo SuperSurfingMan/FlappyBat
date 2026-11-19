@@ -131,7 +131,7 @@ void ObstacleField::ScrollAndScore(float dt, const StageFrame& f) {
             if (fxFx_ && economy_) {
                 economy_->AddScore(1); // 统一入口：含模式倍率与成就上报
                 economy_->ReportAchievement("pipe_passed", 1);
-                fxFx_->PlaySFX((int)SFX::Point, 0.9f);
+                fxFx_->PlaySFX((int)SFX::Point, 1.0f);
             }
         }
 
@@ -500,4 +500,38 @@ void ObstacleField::SetObstacleTintPipe(size_t i, bool isUp, int type) {
 void ObstacleField::SetObstacleTint(size_t i, int type) {
     SetObstacleTintPipe(i, true, type);
     SetObstacleTintPipe(i, false, type);
+}
+
+// ===== AutoPlay 感知：活动列威胁几何快照（只读；契约见 ObstacleField.h）=====
+// 几何与命中判定同源：间隙上下沿 = 上管底缘/下管顶缘（与贴脸判定同一公式）；
+// 摆动参数随列上报，间隙中心的摆动预测由消费方按 OscillClock 外推。
+void ObstacleField::CapturePipeSense(std::vector<PipeSense>& out) const {
+    out.clear();
+    out.reserve(obstacleStates.size());
+    for (size_t i = 0; i < obstaclesUpPool.size() && i < obstacleStates.size(); ++i) {
+        const bool upFlying = i < flyingStates.size() && flyingStates[i].up.flying;
+        const bool downFlying = i < flyingStates.size() && flyingStates[i].down.flying;
+        if (upFlying && downFlying) continue; // 整列被撞飞：无威胁
+
+        const auto up = obstaclesUpPool[i];
+        const auto down = obstaclesDownPool[i];
+        const VariantState& st = obstacleStates[i];
+
+        PipeSense p;
+        p.x = upFlying ? down->GetPosition().x : up->GetPosition().x; // 与滚动锚点同式
+        p.halfWidth = cfg().GetObstacleWidth() * 0.5f;
+        p.gapTop = up->GetPosition().y - up->GetScale().y * 0.5f;
+        p.gapBottom = down->GetPosition().y + down->GetScale().y * 0.5f;
+        p.baseGapCenter = st.baseGapCenter;
+        p.oscAmp = st.oscillAmp;
+        p.oscPhase = st.oscillPhase;
+        p.oscSpeed = OscillSpeed;
+        p.gapSize = st.gapSize;
+        p.type = st.type;
+        p.upSolid = !upFlying;
+        p.downSolid = !downFlying;
+        out.push_back(p);
+    }
+    std::sort(out.begin(), out.end(),
+              [](const PipeSense& a, const PipeSense& b) { return a.x < b.x; });
 }

@@ -114,6 +114,8 @@ add_executable(demo
 
     # gameplay/ —— 玩法域：模式策略 / 注册表 / 参数表 / SAT 碰撞检测
     src/gameplay/GameMode.h
+    src/gameplay/GustPhysics.h
+    src/gameplay/ShieldRules.h
     src/gameplay/ItemCatalog.h
     src/gameplay/ModeDefinition.h
     src/gameplay/ModeRegistry.h
@@ -157,6 +159,16 @@ add_executable(demo
     src/ui/UISystem.cpp
     src/ui/InputScope.h
 
+    # autoplay/ —— 自动演示（Auto Play）：策略注册表 + 感知契约 + 内置规则策略
+    # （开闭点：新模式的可自动演示支持 = AutoPilotRoster.cpp 登记一个 IAutoPilotPolicy 实现）
+    src/autoplay/IAutoPilotPolicy.h
+    src/autoplay/AutoPilotSenses.h
+    src/autoplay/AutoPilotDirector.h
+    src/autoplay/AutoPilotDirector.cpp
+    src/autoplay/AutoPilotRoster.cpp
+    src/autoplay/policies/ClassicRulePilot.h
+    src/autoplay/policies/ClassicRulePilot.cpp
+
     # scene/ —— 场景与转场
     src/scene/SceneKey.h
     src/scene/SceneManager.cpp
@@ -186,6 +198,8 @@ add_executable(demo
     src/scene/stage/RainSystemLightning.cpp   # 预警 -> 落雷状态机 / 折线生成
     src/scene/stage/RainSystemSplash.cpp      # 水花精灵池 / 地形表面采样
     src/scene/stage/FeedbackFx.cpp
+    src/scene/stage/ShieldAuraFx.h
+    src/scene/stage/ShieldAuraFx.cpp     # 短护盾圆形动态遮罩
     src/scene/stage/StageHud.cpp
     src/scene/stage/ParallaxField.cpp
     src/scene/stage/RunSettlement.cpp
@@ -211,6 +225,7 @@ add_executable(demo
     src/app/Services.h
     src/app/Services.cpp
     src/app/ScoreRank.cpp
+    src/app/TuningParams.h    # 设置页「参数调节」的参数表（范围/量化/存档 P 行）
     src/app/DataIntegrity.h
     src/app/DataIntegrity.cpp
     src/audio/SFXCatalog.h

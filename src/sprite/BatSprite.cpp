@@ -30,6 +30,26 @@ BatSprite::BatSprite(std::shared_ptr<Texture2D> texture, ResourceManager& res, c
     LoadParamsFromConfig(cfg); // 从配置加载参数
 }
 
+// f: 垂直速度 -> 俯仰目标角（弧度）。曲线设计参考 Flappy Bird 的姿态机制：
+// 振翅瞬间抬头 25°、无操作失速后渐进低头、长坠饱和于 90° 垂直俯冲。
+// 上仰段按 vy/vFlap 归一；下坠段以 [0.4·vFlap, 3.2·vFlap] 为区间做 smoothstep——
+// 非线性 S 形让刚过顶点的滑行保持平飞、中段果断翻头、终端速度附近不再抖动。
+float BatSprite::PitchAngleFromVelocity(float velocity, float flapSpeed) {
+    // smoothstep：两端导数为 0 的 S 形缓动
+    auto smoothstep = [](float t) { return t * t * (3.0f - 2.0f * t); };
+
+    if (velocity > 0.0f) {
+        // 上升段：振翅瞬间 vy=vFlap → 立即满上仰；升至顶点渐回平
+        const float t = std::clamp(velocity / flapSpeed, 0.0f, 1.0f);
+        return MaxPitchUpRad * smoothstep(t);
+    }
+    // 下坠段：越过低头启动速度前保持平飞（滑行），随后渐进翻头、长坠垂直扎下
+    const float engage = DownEngageV * flapSpeed;
+    const float span   = (DownFullV - DownEngageV) * flapSpeed;
+    const float t = std::clamp((-velocity - engage) / span, 0.0f, 1.0f);
+    return -MaxPitchDownRad * smoothstep(t);
+}
+
 void BatSprite::Update(float dt) {
     if (invincibleTimer.IsRunning()) invincibleTimer.Update(dt);
     Sprite::Update(dt);
@@ -43,10 +63,18 @@ void BatSprite::Update(float dt) {
         SetGlow(0.0f);
     }
 
+    // 俯仰姿态（渲染）：目标角来自 f(vy)，指数平滑后合成。
+    // 振翅瞬间目标角突跳约 36°，平滑把它摊到 ~0.15s——保留“抬头一瞬”的利落
+    // 又避免单帧跳变；下坠段目标角随速度连续变化，平滑只带来微小滞后。
+    const float pitchTarget = PitchAngleFromVelocity(velocity, jumpStrength);
+    pitchAngle += (pitchTarget - pitchAngle) * std::min(1.0f, dt * PitchEaseRate);
+
     // 横移倾角（渲染）：向右移顺时针（负角）、向左移逆时针（正角），平滑过渡
     float bankTarget = -MaxBankAngle * std::clamp(horizontalSpeed / HorizontalMoveSpeed, -1.0f, 1.0f);
     bankAngle += (bankTarget - bankAngle) * std::min(1.0f, dt * 10.0f);
-    SetRotation(Vec2(std::cos(bankAngle), std::sin(bankAngle)));
+    // 俯仰 + 横滚合成单一旋转（2D 旋转可交换，角度直接相加即精确）
+    const float attitudeAngle = pitchAngle + bankAngle;
+    SetRotation(Vec2(std::cos(attitudeAngle), std::sin(attitudeAngle)));
 }
 
 bool BatSprite::GetHitState() const {
@@ -72,6 +100,7 @@ void BatSprite::ResetState() {
     velocity = 0.f;
     horizontalSpeed = 0.0f;
     bankAngle = 0.0f;
+    pitchAngle = 0.0f;
     SetRotation(Vec2(1.0f, 0.0f));
     this->isInvincible = false;
     this->invincibleTimer.Reset();
@@ -113,14 +142,14 @@ void BatSprite::JumpNow() {
     velocity = jumpStrength;
 }
 
-void BatSprite::Falling(float dt) {
+void BatSprite::Falling(float dt, float driftY) {
     velocity -= gravity * dt;
     auto pos = GetPosition();
-    pos.y += velocity * dt; // 注意：y轴向上为正
+    pos.y += (velocity + driftY) * dt; // 注意：y轴向上为正；漂移项独立于振翅速度
     pos.x += horizontalSpeed * dt;
     pos.x = std::clamp(pos.x, xBoundMin, xBoundMax); // 横向限制在窗口内
     // 纵向钳制在地面/天花板致死线内：常规局触线当帧判死（判定阈值与本边界一致，行为不变）；
-    // 无敌（护盾/开局保护/巨化/俯冲无敌帧）与怪物段落期免死，若不钳制会径直沉出地图外——改为贴线滑行
+    // 无敌护盾/短护盾/开局保护/巨化/受击无敌与怪物段落期免死时，若不钳制会径直沉出地图外——改为贴线滑行
     if (pos.y < yBoundMin) {
         pos.y = yBoundMin;
         velocity = 0.0f; // 贴线不累积下坠速度，免死结束后由边界判定接管

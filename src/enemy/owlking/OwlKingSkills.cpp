@@ -5,6 +5,7 @@
 #include "core/Config.h"
 #include "audio/AudioSystem.h"
 #include "enemy/IStageServices.h"
+#include "gameplay/ShieldRules.h"
 
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,30 @@
 // 弹体与水晶池、双向伤害结算。相位切换与逐帧编排仍在 OwlKing.cpp，
 // 世界层与前景层绘制在 OwlKingRender.cpp。
 // =============================================================================
+
+// ===== 技能各状态时长表（UpdateSkill 推进与 CaptureSense 威胁快照共用）=====
+
+float OwlKing::TelegraphDur(Skill s) {
+    switch (s) {
+        case Skill::FeatherStorm: return 0.8f;
+        case Skill::MoonGaze:     return 1.2f;
+        case Skill::ShadowDash:   return 1.2f;
+        case Skill::ScreechWave:  return 1.0f;
+        case Skill::StormCall:    return 1.0f;
+        default:                  return 1.0f; // BloodRain
+    }
+}
+
+float OwlKing::ActiveDur() const {
+    switch (curSkill) {
+        case Skill::MoonGaze:    return 0.6f + 240.f / 120.f; // 静止 + 扫掠（同 UpdateSkill 推进公式）
+        case Skill::ShadowDash:  return ShadowDashDur;
+        case Skill::ScreechWave: return ScreechActiveDur;
+        case Skill::StormCall:   return StormCallActiveDur;
+        case Skill::BloodRain:   return BloodRainActiveDur;
+        default:                 return 0.f; // FeatherStorm 即发即竭
+    }
+}
 
 void OwlKing::StartSkill(Skill s, const EnemyContext& ctx) {
     curSkill = s;
@@ -32,21 +57,17 @@ void OwlKing::StartSkill(Skill s, const EnemyContext& ctx) {
         shadowBandY = ctx.batPos.y; // 暗影带锚定蝙蝠当前高度（§5 B3：离开该高度带即可躲避）
     }
     if (s == Skill::ScreechWave) {
-        // 三道音波的缺口位置起手即定（随机高度、逐道错位 ≥150），波体按 0.6s 间隔在 Active 内依次发出
-        float prev = -1e9f;
+        // 三道音波的缺口起手即定且近似对齐：同一随机基准高度 ±12px 逐道抖动，
+        // 玩家一次就位即可依次穿过全部弧线（缺口高 72px = 蝙蝠碰撞直径 64 + 8px 余量）
         const float lo = ctx.terrainY + 110.f;
         const float hi = std::max(lo + 30.f, ctx.screenH - 120.f);
+        const float base = lo + (hi - lo) * Random::Get().GetRandomFloat();
         for (auto& w : screeches) {
             w.alive = false;
             w.age = 0.f;
             w.centerY = bossY;
-            float g = lo;
-            for (int tries = 0; tries < 8; ++tries) {
-                g = lo + (hi - lo) * Random::Get().GetRandomFloat();
-                if (std::fabs(g - prev) >= 150.f) break;
-            }
-            w.gapY = g;
-            prev = g;
+            w.gapY = std::clamp(base + (Random::Get().GetRandomFloat() - 0.5f) * 2.f * ScreechGapJitter,
+                                lo, hi);
         }
         screechSpawned = 0;
     }
@@ -59,7 +80,7 @@ void OwlKing::StartSkill(Skill s, const EnemyContext& ctx) {
         bloodSpawn = 0.f;
     }
     // 技能蓄力提示音（一期复用 Countdown）
-    ctx.fxFx->PlaySFX((int)SFX::Countdown, 0.8f);
+    ctx.fxFx->PlaySFX((int)SFX::Countdown, 1.0f);
     // 消息盒技能预警（§5：B1「羽刃来袭」/ B4「枭啸蓄力」；独立槽位避免顶掉常驻枭王行）
     if (s == Skill::FeatherStorm) ctx.fxFx->PostWeatherMsg(SkillMsgSlot(), "羽刃来袭", 0.8f, false);
     if (s == Skill::ScreechWave) ctx.fxFx->PostWeatherMsg(SkillMsgSlot(), "枭啸蓄力", 1.0f, false);
@@ -102,15 +123,7 @@ void OwlKing::UpdateSkill(float dt, const EnemyContext& ctx) {
             // 预警期枭王蓄力辉光
             float pulse = 0.5f + 0.5f * std::sin(worldClock * 12.f);
             owlSprite->SetGlow(hitFlashTimer > 0.f ? 2.0f : 1.4f * pulse);
-            float teleDur = 0.f;
-            switch (curSkill) {
-                case Skill::FeatherStorm: teleDur = 0.8f; break;
-                case Skill::MoonGaze:     teleDur = 1.2f; break;
-                case Skill::ShadowDash:   teleDur = 1.2f; break;
-                case Skill::ScreechWave:  teleDur = 1.0f; break;
-                case Skill::StormCall:    teleDur = 1.0f; break;
-                default:                  teleDur = 1.0f; break; // BloodRain
-            }
+            const float teleDur = TelegraphDur(curSkill); // 预警时长表（与威胁快照共用）
             if (skillTimer >= teleDur) {
                 skillState = SkillState::Active;
                 skillTimer = 0.f;
@@ -139,13 +152,15 @@ void OwlKing::UpdateSkill(float dt, const EnemyContext& ctx) {
                         float ang = baseAng + (t - 0.5f) * spread;
                         f.vel = Vec2{std::cos(ang) * speed, std::sin(ang) * speed};
                         f.pos = Vec2{BossPosX - BossHitHalfW, bossY};
+                        f.parried = false;     // 对象池复用：清掉上一发的弹反/挂起状态
+                        f.pendingAge = -1.f;
                         f.alive = true;
                         if (++fired >= n) break;
                     }
                     // 羽刃即刻倾泻完毕 → 直接进入力竭
                     skillState = SkillState::Fatigue;
                     skillTimer = 0.f;
-                    ctx.fxFx->PlaySFX((int)SFX::Thunder, 0.5f);
+                    ctx.fxFx->PlaySFX((int)SFX::Thunder, 1.0f);
                 }
             }
             break;
@@ -215,6 +230,9 @@ void OwlKing::UpdateSkill(float dt, const EnemyContext& ctx) {
                         for (auto& d : bloodDrops) {
                             if (!d.alive) {
                                 d.alive = true;
+                                d.parried = false;      // 对象池复用
+                                d.pendingAge = -1.f;
+                                d.vel = Vec2{0.f, -BloodDropSpeed};
                                 d.pos = Vec2{x, ctx.screenH + 20.f};
                                 break;
                             }
@@ -246,32 +264,60 @@ void OwlKing::UpdateSkill(float dt, const EnemyContext& ctx) {
 void OwlKing::UpdateProjectiles(float dt, const EnemyContext& ctx) {
     const float batR = ctx.batRadius * 0.6f;
 
-    // 羽刃：推进 + 弹反/命中蝙蝠 + 弹回羽刃反伤本体 + 出界回收
+    // ===== B1 羽刃：碰撞挂起 -> 弹反/受击结算 -> 弹回反伤本体 -> 出界回收 =====
+    // 与短护盾的约定（gameplay/ShieldRules.h）：子弹在 t 与蝙蝠判定碰撞时先挂起
+    // kParryGrace 秒；期间玩家释放短护盾（ctx.parryArmed）即额外触发弹反，
+    // 子弹重算轨迹飞向本体；超时才按正常受击结算——这就是 [t, t+0.1] 窗口。
     for (auto& f : feathers.items) {
         if (!f.alive) continue;
+
+        // (a) 挂起中：子弹冻结，等待弹反补救输入
+        if (f.pendingAge >= 0.f) {
+            f.pendingAge += dt;
+            if (ctx.parryArmed) {
+                f.pendingAge = -1.f;
+                f.parried = true;
+                f.vel = VelocityToBoss(f.pos);
+                OnParrySuccess(ctx, f.pos);
+                continue;
+            }
+            if (f.pendingAge > shield::kParryGrace) {
+                f.pendingAge = -1.f;
+                DamageBat(ctx, 0.f); // 窗口超时：正常受击
+                f.alive = false;
+            }
+            continue;
+        }
+
+        // 弹反后的子弹持续重新瞄准本体当前位置：本体在浮游，保证「飞向枭王」真能命中
+        if (f.parried) f.vel = VelocityToBoss(f.pos);
         f.pos += Vec2{f.vel.x * dt, f.vel.y * dt};
-        float dx = f.pos.x - ctx.batPos.x;
-        float dy = f.pos.y - ctx.batPos.y;
-        // 弹反（§4.1 三期）：俯冲无敌帧内触羽 → 羽刃原速弹回反伤本体
-        if (!f.parried && ctx.batParry &&
-            dx * dx + dy * dy < (14.f + batR) * (14.f + batR)) {
-            f.parried = true;
-            f.vel = Vec2{-f.vel.x, -f.vel.y}; // 原速弹回
-            ctx.fxFx->PlaySFX((int)SFX::Point, 0.7f);
-            ctx.fxFx->FloatTextAt("弹反！", f.pos + Vec2{0.f, 26.f},
-                                1.f, 0.95f, 0.55f, 20.f, 0.8f);
+        const float dx = f.pos.x - ctx.batPos.x;
+        const float dy = f.pos.y - ctx.batPos.y;
+
+        // (b) 与蝙蝠判定碰撞
+        if (!f.parried && dx * dx + dy * dy < (14.f + batR) * (14.f + batR)) {
+            if (ctx.parryArmed) {
+                // 碰撞当帧（t）就放出短护盾：直接弹反
+                f.parried = true;
+                f.vel = VelocityToBoss(f.pos);
+                OnParrySuccess(ctx, f.pos);
+            } else if (ctx.batOtherInvincible) {
+                f.alive = false;               // 原有无敌（无敌护盾/巨化等）吸收，不碎短护盾
+            } else if (ctx.batShieldActive) {
+                ctx.fxPlayer->ConsumeShortShield(); // 短护盾已生效：挡下一次即消失（不弹反）
+                f.alive = false;
+            } else if (ctx.batInvincible) {
+                f.alive = false;               // 聚合兜底：本帧稍早已碎盾
+            } else {
+                f.pendingAge = 0.f;           // 无防护：挂起，等待 0.1s 内补放短护盾
+            }
             continue;
         }
-        if (!f.parried &&
-            dx * dx + dy * dy < (14.f + batR) * (14.f + batR)) {
-            DamageBat(ctx, 0.f);
-            f.alive = false; // 命中即消散
-            continue;
-        }
-        // 弹回羽刃同样需进入本体包围盒（与音爆同规则，含纵向判定）
+        // (c) 弹回的羽刃进入本体包围盒（与音爆同规则，含纵向判定）
         if (f.parried && f.pos.x >= BossPosX - BossHitHalfW &&
             std::fabs(f.pos.y - bossY) < BossH * 0.5f) {
-            DamageBoss(ParryDamage, f.pos); // 弹回羽刃反伤本体
+            DamageBoss(ParryDamage, f.pos);
             f.alive = false;
             continue;
         }
@@ -281,18 +327,58 @@ void OwlKing::UpdateProjectiles(float dt, const EnemyContext& ctx) {
         }
     }
 
-    // B6 坠羽：下落 + 命中蝙蝠 + 落地回收
+    // ===== B6 坠羽：与羽刃同一套挂起/弹反规则 =====
     for (auto& d : bloodDrops) {
         if (!d.alive) continue;
-        d.pos.y -= BloodDropSpeed * dt;
-        if (d.pos.y < ctx.terrainY - 10.f) {
+
+        if (d.pendingAge >= 0.f) {
+            d.pendingAge += dt;
+            if (ctx.parryArmed) {
+                d.pendingAge = -1.f;
+                d.parried = true;
+                d.vel = VelocityToBoss(d.pos);
+                OnParrySuccess(ctx, d.pos);
+                continue;
+            }
+            if (d.pendingAge > shield::kParryGrace) {
+                d.pendingAge = -1.f;
+                DamageBat(ctx, 0.f);
+                d.alive = false;
+            }
+            continue;
+        }
+
+        if (d.parried) d.vel = VelocityToBoss(d.pos);
+        d.pos += Vec2{d.vel.x * dt, d.vel.y * dt};
+        const float dx = d.pos.x - ctx.batPos.x;
+        const float dy = d.pos.y - ctx.batPos.y;
+        if (!d.parried && dx * dx + dy * dy < (12.f + batR) * (12.f + batR)) {
+            if (ctx.parryArmed) {
+                d.parried = true;
+                d.vel = VelocityToBoss(d.pos);
+                OnParrySuccess(ctx, d.pos);
+            } else if (ctx.batOtherInvincible) {
+                d.alive = false;
+            } else if (ctx.batShieldActive) {
+                ctx.fxPlayer->ConsumeShortShield();
+                d.alive = false;
+            } else if (ctx.batInvincible) {
+                d.alive = false;
+            } else {
+                d.pendingAge = 0.f;
+            }
+            continue;
+        }
+        if (d.parried && d.pos.x >= BossPosX - BossHitHalfW &&
+            std::fabs(d.pos.y - bossY) < BossH * 0.5f) {
+            DamageBoss(ParryDamage, d.pos);
             d.alive = false;
             continue;
         }
-        float dx = d.pos.x - ctx.batPos.x;
-        float dy = d.pos.y - ctx.batPos.y;
-        if (dx * dx + dy * dy < (12.f + batR) * (12.f + batR)) {
-            DamageBat(ctx, 0.f);
+        // 未弹反的坠羽落地回收；弹反后改按通用出界回收
+        if (!d.parried && d.pos.y < ctx.terrainY - 10.f) d.alive = false;
+        if (d.parried && (d.pos.x < -30.f || d.pos.x > ctx.screenW + 40.f ||
+                          d.pos.y < -30.f || d.pos.y > ctx.screenH + 60.f)) {
             d.alive = false;
         }
     }
@@ -329,14 +415,7 @@ void OwlKing::UpdateProjectiles(float dt, const EnemyContext& ctx) {
         }
     }
 
-    // 俯冲撞击（§4.4 B6-a）：俯冲中的蝙蝠撞上本体 → 10 伤害 + 向左弹开 160px（防贴脸刷伤害）
-    if (ctx.batDiving &&
-        std::fabs(ctx.batPos.x - BossPosX) < BossHitHalfW &&
-        std::fabs(ctx.batPos.y - bossY) < BossH * 0.5f) {
-        DamageBoss(DiveHitDamage, ctx.batPos);
-        ctx.fxFx->Shake(8.0f);
-        ctx.fxPlayer->BounceBat(-160.f, 0.f); // 弹开方向固定向左
-    }
+    // 俯冲撞击（B6-a）随下坠冲刺机制一并取消；弹反输出改由短护盾弹回子弹承担。
 
     // 巨化冲撞（§4.5 二期调整）：巨化蝙蝠任意方向撞上本体 → 20 伤害，撞击一次后巨化立即结束
     // （ctx.batRadius 已按巨化体型放大；交战期巨化本就免伤，撞击是巨化期的唯一输出手段）
@@ -366,7 +445,7 @@ void OwlKing::UpdateProjectiles(float dt, const EnemyContext& ctx) {
         const float dist = std::sqrt(dx * dx + dy * dy);
         if (std::fabs(dist - ScreechSpeed * w.age) < 14.f + batR &&
             std::fabs(ctx.batPos.y - w.gapY) > ScreechGapHalf + batR * 0.5f) {
-            DamageBat(ctx, 0.f); // 缺口（130px + 半幅宽容）内穿越则安全
+            DamageBat(ctx, 0.f); // 缺口（高 72px = 碰撞直径 64+8 余量，另加半幅中心宽容）内穿越则安全
         }
     }
 }
@@ -405,7 +484,7 @@ void OwlKing::UpdateCrystals(float dt, const EnemyContext& ctx) {
             IRunEconomy& eco = *ctx_->fxEconomy;
             IPlayerCommands& pl = *ctx_->fxPlayer;
             eco.AddCoins(CrystalCoin); // 顺带金币（§4.2；对齐巨化星惯例，不另发飘字）
-            fx.PlaySFX((int)SFX::Collect, 0.8f);
+            fx.PlaySFX((int)SFX::Collect, 1.0f);
             fx.FloatTextAt("声波 +1", c.pos + Vec2{0.f, 34.f},
                          0.57f, 0.85f, 0.95f, 20.f, 1.0f);
             pl.OnEnemyItemCollected(c.pos); // 预留：连击/成就通道（一期空操作）
@@ -414,14 +493,26 @@ void OwlKing::UpdateCrystals(float dt, const EnemyContext& ctx) {
 }
 
 void OwlKing::DamageBat(const EnemyContext& ctx, float edgeY) {
-    if (ctx.batInvincible || hitInvTimer > 0.f) return;
+    // 伤害闸门顺序（与场景碰撞分支一致）：
+    //   1) 其它无敌（无敌护盾/巨化/开局保护/受击无敌）直接吸收，不消耗短护盾；
+    //   2) 本侧帧内免伤门（hitInvTimer）优先于短护盾，避免同一波弹幕白白碎盾；
+    //   3) 一次性短护盾挡下一次即碎；
+    //   4) 都没有才扣心。
+    if (ctx.batOtherInvincible) return;
+    if (hitInvTimer > 0.f) return;
+    if (ctx.batShieldActive) {
+        if (ctx.fxPlayer && ctx.fxPlayer->ConsumeShortShield())
+            hitInvTimer = std::max(hitInvTimer, shield::kBreakInvuln);
+        return;
+    }
+    if (ctx.batInvincible) return; // 聚合兜底：本帧稍早已碎盾/无敌
     if (batHearts <= 0) return;
     batHearts--;
     hitInvTimer = HitInvulnDur; // 本侧帧内精确免伤门（蝙蝠侧闪烁无敌经 GrantBatInvuln 另行授予）
     // 受击反馈（§6/§8）：音效/抖屏 10/飘字/无敌闪烁/击退/心形碎裂
     IFeedbackFx& fx = *ctx_->fxFx;
     IPlayerCommands& pl = *ctx_->fxPlayer;
-    fx.PlaySFX((int)SFX::Death, 0.7f);
+    fx.PlaySFX((int)SFX::Death, 1.0f);
     fx.Shake(10.0f);                                   // §8 抖动表：受击 10
     fx.FloatTextAt("受击 -1", ctx.batPos + Vec2{0.f, 60.f},
                  0.87f, 0.35f, 0.35f, 24.f, 1.0f);
@@ -434,6 +525,26 @@ void OwlKing::DamageBat(const EnemyContext& ctx, float edgeY) {
     heartBreakIdx = batHearts;                           // §8：刚被击碎的心形槽位（碎裂残影）
     heartBreakTimer = HeartBreakDur;
     if (batHearts <= 0) pendingKill_ = true; // 心数耗尽 -> Update 收尾统一致死
+}
+
+Vec2 OwlKing::VelocityToBoss(Vec2 from) const {
+    // 重算轨迹：始终指向本体当前中心（本体纵向浮游，UpdateProjectiles 每帧重瞄）
+    const Vec2 d{BossPosX - from.x, bossY - from.y};
+    const float len = std::sqrt(d.x * d.x + d.y * d.y);
+    if (len < 1.f) return Vec2{ParrySpeed, 0.f};
+    return Vec2{d.x / len * ParrySpeed, d.y / len * ParrySpeed};
+}
+
+void OwlKing::OnParrySuccess(const EnemyContext& ctx, Vec2 at) {
+    // 弹反也算「挡下一次受击」：短护盾随即消失（CD 已在释放时重置，不受影响）
+    if (ctx.fxPlayer && ctx.fxPlayer->ConsumeShortShield())
+        hitInvTimer = std::max(hitInvTimer, shield::kBreakInvuln);
+    if (ctx.fxFx) {
+        ctx.fxFx->PlaySFX((int)SFX::Point, 1.0f);
+        ctx.fxFx->FloatTextAt("弹反！", at + Vec2{0.f, 26.f},
+                             1.f, 0.95f, 0.55f, 20.f, 0.8f);
+        ctx.fxFx->Shake(5.0f);
+    }
 }
 
 void OwlKing::DamageBoss(int amount, const Vec2& at) {
@@ -449,7 +560,7 @@ void OwlKing::DamageBoss(int amount, const Vec2& at) {
     if (hp > 0) flinchTimer = FlinchDur; // 受击 flinch（击杀一击直接进死亡演出，不再后仰）
     // 命中反馈（原场景 BossHit 事件分支迁入）
     IFeedbackFx& fx = *ctx_->fxFx;
-    fx.PlaySFX((int)SFX::Point, 0.8f);
+    fx.PlaySFX((int)SFX::Point, 1.0f);
     fx.Shake(6.0f);                                    // §8 抖动表：命中 6
     fx.FloatTextAt("-" + std::to_string(dmg), at + Vec2{0.f, 40.f},
                  0.95f, 0.82f, 0.35f, 22.f, 1.0f);

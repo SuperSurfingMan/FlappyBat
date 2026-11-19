@@ -23,7 +23,9 @@ class EnemyDirector {
 public:
     void Register(std::shared_ptr<IEnemy> enemy);
 
-    void InitAll(const class Config& cfg, class ResourceManager& res); // 资源就绪后建精灵/对象池
+    // 资源就绪后建精灵/对象池；调参随装配一并下发（怪物血量倍率等设置页参数）
+    void InitAll(const class Config& cfg, class ResourceManager& res,
+                 const class TuningParams& tuning);
     void OnRunStart();  // 重开一局：全员完全复位
     void OnBatDead();   // 蝙蝠死亡：全员即时复位（段落中止）
 
@@ -32,6 +34,10 @@ public:
     void Update(float dt, const EnemyContext& ctx);
 
     const EncounterRules& Rules() const { return rules_; }
+
+    // 威胁快照聚合（AutoPlay 等观察者拉取）：按注册序询问，首个填充者生效；
+    // 未实现 CaptureSense 的怪物保持 present=false（对观察者不可见）
+    void CaptureSense(EnemySense& out) const;
 
     void RenderWorld(SpriteRenderer& renderer); // 世界层槽位：道具之后、风线/蝙蝠之前
     void RenderUI();                            // 前景层槽位：场景 ImGui 布局内

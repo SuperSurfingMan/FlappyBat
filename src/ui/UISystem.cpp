@@ -137,7 +137,7 @@ void UISystem::Dispatch() {
         hovered = hit;
         if (hovered) {
             if (audio_ && hovered->ShouldPlayFeedbackSFX())
-                audio_->PlaySFX(SFXToFile(SFX::Hover), 0.45f);
+                audio_->PlaySFX(SFXToFile(SFX::Hover), 1.0f);
             Deliver(hovered, UIEventType::PointerEnter);
         }
     }
@@ -152,7 +152,7 @@ void UISystem::Dispatch() {
         }
         heldMask |= (1u << kBtn);  // 本键由 UI 消费：游戏侧不得再用它触发玩法输入
         if (audio_ && pressed->ShouldPlayFeedbackSFX())
-            audio_->PlaySFX(SFXToFile(SFX::Press), 0.55f);
+            audio_->PlaySFX(SFXToFile(SFX::Press), 1.0f);
         Deliver(pressed, UIEventType::PointerDown);
         Deliver(pressed, UIEventType::Drag);  // 按下当帧同走一次：点轨道/点滑条即定位
     } else if (pressed && down) {

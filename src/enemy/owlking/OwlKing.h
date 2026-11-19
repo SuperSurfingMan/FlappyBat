@@ -56,13 +56,15 @@ public:
     static ArtBatch GetArtBatch();             // 当前批次
     static void     LoadArtBatchPref();        // 从统一存档读偏好（Init 前调用）
 
-    void Init(const class Config& cfg, class ResourceManager& res) override;
+    void Init(const class Config& cfg, class ResourceManager& res,
+              const class TuningParams& tuning) override;
     void OnRunStart() override;
     void OnBatDead() override;
     void Update(float dt, const EnemyContext& ctx) override;
     void RenderWorld(SpriteRenderer& renderer) override;
     void RenderUI() override;
     EncounterRules ActiveRules() const override;
+    void CaptureSense(EnemySense& out) const override; // 威胁几何上报（AutoPlay 等观察者）
 
 private:
     // ===== 常量（玩法设计文档 §7.3/§5） =====
@@ -90,10 +92,13 @@ private:
     static constexpr float ShadowBandHalf = 70.f;   // B3 暗影带半高（带高 140）
     static constexpr float ScreechActiveDur = 3.0f; // B4 Active 总时长（3 波按 0.6s 间隔发出）
     static constexpr float ScreechSpeed = 220.f;    // B4 音波弧扩张速度
-    static constexpr float ScreechGapHalf = 65.f;   // B4 缺口半高（缺口高 130）
-    static constexpr int   DiveHitDamage = 10;      // 俯冲撞击伤害（§4.4 B6-a；调整：15 → 10）
+    // B4 缺口半高：缺口高 72px = 蝙蝠碰撞圆直径 64（BAT_SIZE=64 的等效碰撞半径×2）+ 8px 竖向余量
+    //（设计要求：显著大于碰撞直径 +5~10px）；判定侧另有 +batR/2 中心宽容，安全条全高约 91px
+    static constexpr float ScreechGapHalf = 36.f;
+    static constexpr float ScreechGapJitter = 12.f; // B4 三道缺口近似对齐：逐道相对基准高度的随机抖动幅值
     static constexpr int   GiantHitDamage = 20;     // 巨化冲撞伤害（任意方向接触，撞击一次巨化即止）
-    static constexpr int   ParryDamage = 10;        // 弹反反伤（§4.1 三期：羽刃原速弹回）
+    static constexpr int   ParryDamage = 10;        // 弹反反伤（子弹重算轨迹命中本体）
+    static constexpr float ParrySpeed = 620.f;      // 弹反子弹飞向本体的速度（px/s）
     static constexpr float StormBoltFirst = 0.8f;   // B5 首道雷落点（Active 起始后；预警虚线先行展示）
     static constexpr float StormBoltGap = 0.5f;     // B5 三连雷逐次间隔
     static constexpr float StormCallActiveDur = 1.8f; // B5 Active 总时长（末道雷落地）
@@ -124,9 +129,11 @@ private:
     // 已验收关闭（false）——B5 雷暴召唤回到三阶段技能池，StormCall 抬翼姿态动画随之生效
     static constexpr bool  TestForceBloodRain = false;
 
-    // 组合根注入（Init 一次，生命周期长于本实例）：窗口几何与美术资源查表
+    // 组合根注入（Init 一次，生命周期长于本实例）：窗口几何与美术资源查表、
+    // 设置页可改的玩法参数（血量倍率；血条上限随之同步缩放）
     const class Config* cfg_ = nullptr;
     class ResourceManager* res_ = nullptr;
+    const class TuningParams* tuning_ = nullptr;
 
     // ===== 状态机 =====
     enum class Phase { Hidden, Warning, Engagement, Defeat, Leave };
@@ -166,7 +173,7 @@ private:
     // B3 暗影掠袭：预警带锚定的蝙蝠高度（预警开始时捕获）
     float shadowBandY = 480.f;
 
-    // B4 枭啸音波：三道缺口弧（波体独立于技能状态存续至超时；缺口位置起手即定、逐道错位）
+    // B4 枭啸音波：三道缺口弧（波体独立于技能状态存续至超时；缺口起手即定、三道近似对齐 ±12px）
     struct Screech { bool alive = false; float age = 0.f; float gapY = 480.f; float centerY = 480.f; };
     std::array<Screech, 3> screeches;
     int screechSpawned = 0;
@@ -179,12 +186,26 @@ private:
     std::array<float, 4> bloodCols = {135.f, 215.f, 295.f, 375.f};
     float bloodReroll = 0.f;
     float bloodSpawn = 0.f;
-    struct BloodDrop { bool alive = false; Vec2 pos = {0.f, 0.f}; };
+    // pendingAge >= 0：已与蝙蝠判定碰撞、正挂起等待 kParryGrace 弹反窗口；
+    // <0 = 正常飞行。parried = 已被弹反、正飞向本体。
+    struct BloodDrop {
+        bool alive = false;
+        bool parried = false;
+        Vec2 pos = {0.f, 0.f};
+        Vec2 vel = {0.f, 0.f};   // 生成时设为 (0, -BloodDropSpeed)，弹反后重算
+        float pendingAge = -1.f;
+    };
     std::vector<BloodDrop> bloodDrops;
     std::vector<std::shared_ptr<Sprite>> bloodSprites;
 
     // ===== 对象池 =====
-    struct Feather { bool alive = false; bool parried = false; Vec2 pos; Vec2 vel; };
+    struct Feather {
+        bool alive = false;
+        bool parried = false;
+        Vec2 pos;
+        Vec2 vel;
+        float pendingAge = -1.f; // 同 BloodDrop：碰撞挂起计时
+    };
     SpritePool<Feather> feathers;                  // x8（B1 弹体）
     struct Wave { bool alive = false; Vec2 pos; float travel = 0.f; int destroyed = 0; };
     SpritePool<Wave> waves;                        // x3
@@ -224,6 +245,9 @@ private:
     void UpdateCrystals(float dt, const EnemyContext& ctx);
     void DamageBat(const EnemyContext& ctx, float edgeY);
     void DamageBoss(int amount, const Vec2& at);
+    // 弹反：把子弹速度重算为「指向本体当前位置」，并统一发反馈/消耗短护盾
+    Vec2 VelocityToBoss(Vec2 from) const;
+    void OnParrySuccess(const EnemyContext& ctx, Vec2 at);
     bool TryFireSonic(const Vec2& from);  // 音爆发射（firePrimary 意图驱动）
     int Stage() const;                    // 1/2/3 按剩余 HP 比例（狂暴分层）
     float SkillInterval() const;          // 随阶段缩短 x cdScale
@@ -231,6 +255,9 @@ private:
     static float s_aggression;            // 攻击欲望静态存储（全局唯一切柄的实现细节）
     float DamageMult() const;             // 力竭期 1.5
     void RollBloodCols(const EnemyContext& ctx); // B6：重掷顶部标记列
+    // 技能各状态时长表：UpdateSkill 推进与 CaptureSense 威胁快照共用（改表一处同步）
+    static float TelegraphDur(Skill s); // 预警时长（§5：B1 0.8 / B2・B3 1.2 / B4・B5・B6 1.0）
+    float ActiveDur() const;            // 释放时长（按 curSkill；B1 即发即竭为 0）
     // ---- 表演层 ----
     void ApplyAnimation();               // 每帧调用：期望动画 != 当前则切表
     Anim  DesiredAnim() const;           // 由 状态机/技能循环/狂暴/受击 推导期望动画

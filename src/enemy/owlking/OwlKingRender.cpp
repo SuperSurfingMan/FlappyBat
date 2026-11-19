@@ -194,11 +194,13 @@ void OwlKing::RenderWorld(SpriteRenderer& renderer) {
         renderer.Draw_UV(feathers.sprites[i]);
     }
 
-    // B6 血月坠羽（红色羽刃朝下坠落；旋转惯例同 B1 羽刃，速度 (0,-1) 对应 (-1,0)）
+    // B6 血月坠羽（红色羽刃；未弹反时朝下坠落，弹反后旋转对准飞向本体的速度）
     for (size_t i = 0; i < bloodDrops.size(); ++i) {
         if (!bloodDrops[i].alive) continue;
         bloodSprites[i]->SetPosition(bloodDrops[i].pos.x, bloodDrops[i].pos.y);
-        bloodSprites[i]->SetRotation(Vec2{-1.f, 0.f});
+        const Vec2& v = bloodDrops[i].vel;
+        const float ang = std::atan2(v.y, v.x) - 3.14159f * 0.5f;
+        bloodSprites[i]->SetRotation(Vec2{std::cos(ang), std::sin(ang)});
         bloodSprites[i]->SetColor(1.f, 0.45f, 0.45f, 0.95f);
         renderer.Draw_UV(bloodSprites[i]);
     }
@@ -229,9 +231,10 @@ void OwlKing::RenderUI() {
                                     colT, colR, colR, colT);
     }
 
-    // ---- 声波槽：顶部中央心数（y142）下方一行（充能 >0 或战斗相关相位时显示） ----
-    // 置于顶部中央而非左上角，避免与天气事件消息盒（y190 起）纵向冲突
-    if (sonicCharge > 0 || phase == Phase::Warning || phase == Phase::Engagement) {
+    // ---- 声波槽：顶部中央心数（y142）下方一行（仅战斗相位显示） ----
+    // 充能段数跨遭遇保留（§4.2），但 UI 随战斗相位收起：击败/离场后不再残留场上，
+    // 下次 Warning 随「夜枭将至」一并回归（置于顶部中央，避免与天气事件消息盒纵向冲突）
+    if (phase == Phase::Warning || phase == Phase::Engagement) {
         const float rowY = 190.f;
         const float cx0 = W * 0.5f - 34.f; // 3 菱形整体居中
         for (int i = 0; i < SonicChargeMax; ++i) {
@@ -406,6 +409,9 @@ void OwlKing::RenderUI() {
             float thetaG = 0.f, delta = 0.f;
             if (gapOnArc) {
                 thetaG = std::atan2(dyG, -std::sqrt(r * r - dyG * dyG));
+                // 缺口在弧心下方（dyG<0）时 atan2 落在 (−π,−π/2)，须折回 (π,3π/2) 才在左半圆参数域内：
+                // 否则上段 stroke 因终点≤起点被跳过、下段 sweep 超过 2π 自覆盖整圆，缺口消失（弧线连成整环）
+                if (thetaG < a0) thetaG += 3.14159265f * 2.f;
                 delta = std::asin(std::clamp(ScreechGapHalf / r, 0.f, 1.f));
             }
             auto stroke = [&](float sa, float ea) {

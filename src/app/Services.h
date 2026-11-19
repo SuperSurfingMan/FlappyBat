@@ -7,6 +7,8 @@ class ResourceManager;
 class ScoreRank;
 class Achievements;
 class PlayerProfile;
+class TuningParams;
+class AutoPilotDirector;
 class UISystem;
 class SceneManager;
 class Application;
@@ -38,6 +40,8 @@ public:
              ScoreRank& scores,
              Achievements& ach,
              PlayerProfile& profile,
+             TuningParams& tuning,
+             AutoPilotDirector& autoPilot,
              UISystem& ui,
              SceneManager& scenes,
              Application& app);
@@ -51,6 +55,8 @@ public:
     ScoreRank&       Scores();
     Achievements&    Ach();
     PlayerProfile&   Profile();
+    TuningParams&    Tuning();  // 设置页可改的玩法参数（app/TuningParams.h 参数表）
+    AutoPilotDirector& AutoPilot(); // 自动演示导演（策略注册表 + 设置页开关）
     UISystem&        UI();
     SceneManager&    Scenes();
     Application&     App();
@@ -62,6 +68,8 @@ private:
     ScoreRank*       scores_;
     Achievements*    ach_;
     PlayerProfile*   profile_;
+    TuningParams*    tuning_;
+    AutoPilotDirector* autoPilot_;
     UISystem*        ui_;
     SceneManager*    scenes_;
     Application*     app_;

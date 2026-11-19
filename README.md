@@ -10,7 +10,7 @@
 - **Boss 战**：「枭王」（OwlKing），基于可扩展的怪物框架（导演 + 怪物登记表）实现。
 - **天气演出**：雨滴、地面积水水花、狂风、闪电等特效，由 `WeatherDirector` 统一调度，配合自研 GLSL 着色器与实例化渲染实现。
 - **成长与成就**：金币、护盾科技树解锁、成就与累计统计统一持久化到 `player_save.dat`；本地分数排行榜保存于 `score.dat`。
-- **完整场景流**：启动画面 → 主菜单 → 局内 → 排行榜 / 成就 / 设置（音量调节、枭王形象批次切换等），支持圆形聚焦转场、暂停/继续与 Toast 提示。
+- **完整场景流**：启动画面 → 主菜单 → 局内 → 排行榜 / 成就 / 设置（音量调节、参数调节、枭王形象批次切换），支持圆形聚焦转场、暂停/继续与 Toast 提示。
 - **中文 UI**：界面文字基于 Dear ImGui + VonwaonBitmap 16px 位图字体渲染。
 
 ## 技术栈
@@ -32,7 +32,7 @@
 ```
 src/
 ├── main.cpp            # 程序入口
-├── app/                # 组合根：Application / Services 服务聚合（构造注入）/ 排行榜 / 存档 / 启动校验
+├── app/                # 组合根：Application / Services 服务聚合（构造注入）/ 排行榜 / 存档 / 调参表 / 启动校验
 ├── audio/              # AudioSystem：miniaudio 封装（BGM / 音效）
 ├── core/               # 基础库：Vec2 数学、Config 全局配置、Input、Timer
 ├── enemy/              # 怪物框架：导演 + 内置怪物登记 + 枭王实现
@@ -48,7 +48,7 @@ src/
 └── ui/                 # 推送式 UI 事件派发内核（UISystem / UIWidget / FontManager 等）
 ```
 
-整体架构：`Application`（GLFW / GLAD / ImGui 初始化 + 帧循环）驱动 `SceneManager`；9 个服务由 `main()` 装配成 `Services` 后沿构造链下发（场景 → 图层 → 子系统），没有全局访问点。场景内组合精灵体系、覆盖层与各玩法子系统；渲染侧为「渲染器 + 槽位分发」管线（见 `src/render/WorldSlot.h`）。
+整体架构：`Application`（GLFW / GLAD / ImGui 初始化 + 帧循环）驱动 `SceneManager`；10 个服务由 `main()` 装配成 `Services` 后沿构造链下发（场景 → 图层 → 子系统），没有全局访问点。场景内组合精灵体系、覆盖层与各玩法子系统；渲染侧为「渲染器 + 槽位分发」管线（见 `src/render/WorldSlot.h`）。
 
 ### 扩展指南（数据驱动的扩展点）
 
@@ -60,6 +60,7 @@ src/
 | 场景 | 在 `Application::InitScenes()` 里 `std::make_shared<YourScene>(*services)` 并 `Register` 一行。场景构造函数统一接收 `Services&`（依赖来自组合根，不查全局）；场景键是开放字符串（`src/scene/SceneKey.h`），未注册的键会在 `RequestScene` 处指名报错。 |
 | 转场 / 天气渲染器 | 实现 `ISceneTransition` / `IRenderer` 后，在 `main.cpp` 组合根或 `WeatherRendererRoster.cpp` 加一行注册。转场样式同样是开放字符串键（`kTransitionCircleFocus` 等）。 |
 | 成就事件 | 往 `Achievements::Rules()` 规则表加一行，无需扩枚举或加 `case`。 |
+| 可调参数（设置页「参数调节」） | 在 `src/app/TuningParams.h` 的参数表加一行（标签 / 读数格式 / 范围 / 量化 / 默认值）+ 枚举加一项 + 消费点读一次 `InitialInvulnSec()` 之类的 getter。归一化映射、量化与存档 `P` 行由参数类统一处理，设置页按表自动多出一行滑条，界面代码零改动。 |
 
 进程启动时会执行 `ValidateDataTables()`（见 `src/app/DataIntegrity.cpp`），遍历注册表校验模式参数、道具定义、成就规则、音效路径与怪物调参，任一表项缺失都会拒绝启动并指出具体位置。
 

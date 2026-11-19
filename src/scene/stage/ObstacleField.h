@@ -1,5 +1,6 @@
 #pragma once
 #include "scene/stage/StageFrame.h"
+#include "autoplay/AutoPilotSenses.h" // PipeSense：AutoPlay 感知契约（生产方填充，同 StageFrame 方向）
 #include "core/Math.h"
 #include <array>
 #include <functional>
@@ -44,6 +45,11 @@ public:
 
     int RunSmashCount() const { return runSmashCount; }
     int RunNearMissCount() const { return runNearMissCount; }
+
+    // ===== AutoPlay 感知（只读快照，方向与 StageFrame 相对：本类向上供数）=====
+    // 活动列威胁几何（x 升序；被巨化撞飞的整列无威胁跳过，残缺列只报在位半管）
+    void CapturePipeSense(std::vector<PipeSense>& out) const;
+    float OscillClock() const { return oscillTime; } // 摆动变体全局时钟（摆动预测用）
 
 private:
     const Config& cfg() const { return *cfg_; }

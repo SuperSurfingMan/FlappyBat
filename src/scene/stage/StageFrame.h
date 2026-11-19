@@ -1,6 +1,7 @@
 #pragma once
 #include "core/Math.h"
 #include "ui/GameInput.h"
+#include "autoplay/IAutoPilotPolicy.h" // AutoPilotActions：Auto Play 动作意图契约
 
 // =============================================================================
 // 局内子系统的只读帧快照（MainScene 每帧填充一次）。
@@ -35,6 +36,11 @@ struct StageFrame {
     float enemyMinRain = 0.0f;    // 怪物段落雨强下限（minRainIntensity）
 
     const GameInputFrame* input = nullptr;
+
+    // Auto Play 动作意图（非空 = 已武装）：本帧玩法输入由策略提供，
+    // 玩家子系统在各输入读取点优先消费它；null = 人类输入直通（行为不变）。
+    // 意图与人类输入走同一消费点，音效/无敌帧/冷却/能量闸门全部复用。
+    const AutoPilotActions* autoPilot = nullptr;
 
     float timeLeft = 0.0f;
     bool  timed = false;

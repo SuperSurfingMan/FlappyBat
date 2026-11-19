@@ -25,6 +25,11 @@ public:
     // WeatherDirector 因此不必持有某个具体渲染器的裸指针特例。
     virtual void SetGust(bool active, const Vec2& force) { (void)active; (void)force; }
 
+    // 新一局：清空渲染器自持的表现状态（如风线的淡入强度与线群位置）。
+    // 这些状态不随天气逻辑字段归零，若不显式清理会残留到结算/下一局画面；
+    // 默认空实现，只有自驱动粒子的渲染器需要 override。
+    virtual void ResetFx() {}
+
     // 绘制本渲染器认领槽位中与 slot 匹配的内容;非认领槽位调用为空操作
     virtual void Render(const RenderContext& ctx, WorldSlot slot) = 0;
 
