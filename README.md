@@ -120,10 +120,42 @@ FlappyBat/
 ├── CMakeLists.txt      # 构建脚本（定义 glad / imgui 静态库与 demo 可执行文件）
 ├── vendor/             # 第三方库（GLFW / glad / imgui / stb / miniaudio）
 ├── src/                # 全部 C++ 源码
+├── assets/             # 游戏资源（不在仓库中，见第 3 步下载解压）
 └── README.md
 ```
 
-### 3. 配置与编译
+### 3. 获取游戏资源（必须）
+
+游戏资源（贴图 / 序列帧 / 音频 / 字体 / 着色器 / 运行时清单）**不随仓库分发**，需单独下载资产包并解压到工程根目录：
+
+> **下载**：[flappybat_assets.zip](https://pan.baidu.com/s/1HLWSqw-7-3x5ONtJr4ULFw?pwd=tcf8)（百度网盘），提取码：`tcf8`
+
+**放置方法**：将压缩包解压，把得到的 `assets/` 文件夹整个放到工程根目录（与 `CMakeLists.txt` 同级）。完成后应形成如下结构：
+
+```
+FlappyBat/
+├── assets/
+│   ├── Animations/     # 蝙蝠 / 枭王等序列帧精灵图
+│   ├── Audio/          # 背景音乐与音效
+│   ├── Fonts/          # VonwaonBitmap 16px 中文字体
+│   ├── Sprites/        # 场景 / UI 贴图
+│   ├── shaders/        # 自研 GLSL 着色器
+│   └── manifests/      # 纹理 / 音效运行时清单
+├── CMakeLists.txt
+├── src/
+└── ...
+```
+
+注意两点：
+
+- **不要嵌套**：`assets/` 下应直接是 `Animations/`、`Audio/` 等子目录。若解压出 `assets/assets/` 双层结构，把内层的 `assets/` 移到根目录即可。
+- **从工程根目录启动**：游戏按相对路径从工作目录加载 `assets/`，在别的目录启动 exe 会找不到资源（见第 5 步）。
+
+压缩包内为当前版本代码实际引用的全部资源（116 个文件），解压即得完整可运行的资源集。
+
+**素材来源说明**：蝙蝠、尖刺障碍、雨水水花等图像贴图来自网络素材，部分音效为合成音源。相关素材版权归原作者所有，本项目仅作学习交流使用，请勿用于商业用途。
+
+### 4. 配置与编译
 
 在仓库根目录（`CMakeLists.txt` 所在目录）执行：
 
@@ -140,7 +172,7 @@ cmake --build build -j
 - 构建后脚本会自动把 `glfw3.dll` 拷贝到 exe 同目录；
 - MinGW 运行时（libgcc / libstdc++ / libwinpthread）已通过 `-static` 静态链接，exe 不依赖 `libstdc++-6.dll` 等 DLL。
 
-### 4. 运行
+### 5. 运行
 
 游戏资源（贴图、音频、着色器）在运行时从工作目录的 `assets/` 目录按相对路径加载，因此**需在工程根目录下启动**：
 
@@ -152,7 +184,7 @@ build\demo.exe          # cmd / PowerShell
 
 窗口大小固定为 540 × 960。首次运行后会在工作目录生成 `player_save.dat`（金币 / 科技树 / 成就 / 音量）与 `score.dat`（排行榜）等存档文件。
 
-### 4.1 运行数据表自测（可选）
+### 5.1 运行数据表自测（可选）
 
 ```bash
 cmake --build build --target demo_data_tests
@@ -161,7 +193,7 @@ cmake --build build --target demo_data_tests
 
 自测不依赖 OpenGL / ImGui，覆盖模式数量与并行表的一致性、越界访问是否明确报错、音效路径表完整性，以及 `score.dat` 旧版单榜 / 分段格式 / 旧档段数不足时的读取兼容。主程序启动时也会执行 `ValidateDataTables()`，任何表项缺失都会直接拒绝启动并指出具体位置。
 
-### 5. 用 VS Code 开发（可选）
+### 6. 用 VS Code 开发（可选）
 
 CMake 已开启 `CMAKE_EXPORT_COMPILE_COMMANDS`，构建后会在 `build/compile_commands.json` 生成编译数据库，可直接供 clangd 使用；VS Code 中安装 C/C++ 与 clangd 插件、将编译器路径指向 MSYS2 的 g++（如 `C:/msys64/mingw64/bin/g++.exe`），即可获得精确的代码跳转与补全。
 
@@ -172,3 +204,4 @@ CMake 已开启 `CMAKE_EXPORT_COMPILE_COMMANDS`，构建后会在 `build/compile
 | 配置阶段报 `This project is intended to be built with MinGW-w64` | 使用了非 MinGW 工具链，请改在 MSYS2 MINGW64 终端中构建 |
 | 提示缺少 `glfw3.dll` | 直接运行了别处拷出的 exe；请运行 `build/` 下的 `demo.exe`（构建时已自动拷贝 DLL） |
 | 链接期报 MinGW 运行时符号冲突 | 系统 PATH 中混入了其他 MinGW 环境的旧版 DLL；工程已 `-static` 静态链接运行时，请检查 PATH |
+| 启动后贴图缺失 / 界面异常 / 无声音 | 未获取资产包或放置位置不对：确认 `assets/` 与 `CMakeLists.txt` 同级（根目录下应能看到 `assets/manifests/` 等目录），且从工程根目录启动 exe |
